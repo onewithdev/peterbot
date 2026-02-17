@@ -235,6 +235,20 @@
       margin-top: 16px;
     }
     .download-btn:hover { opacity: 0.85; }
+    @media (max-width: 640px) {
+      nav { gap: 16px; padding: 0 16px; }
+      section { padding: 48px 16px; }
+      .hero-title { font-size: 2.2rem; }
+    }
+    .fade-in { opacity: 0; transform: translateY(24px); transition: opacity 0.5s, transform 0.5s; }
+    .fade-in.visible { opacity: 1; transform: none; }
+    footer {
+      text-align: center; padding: 48px 32px;
+      border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 0.85rem;
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
   </style>
 </head>
 <body>
@@ -744,6 +758,28 @@ const FEATURES = [
       a.href = url; a.download = 'my-ai-framework-blueprint.md'; a.click();
       URL.revokeObjectURL(url);
     }
+    var scrollObserver = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.fw-card, .match-card').forEach(function(el) {
+      el.classList.add('fade-in');
+      scrollObserver.observe(el);
+    });
+
+    document.body.insertAdjacentHTML('beforeend',
+      '<footer>' +
+      '<p>The Claw Family — AI Framework Comparison Guide</p>' +
+      '<p style="margin-top:8px">' +
+      '<a href="https://github.com/openclaw/openclaw">OpenClaw</a> · ' +
+      '<a href="https://github.com/openagen/zeroclaw">ZeroClaw</a> · ' +
+      '<a href="https://github.com/gavrielc/nanoclaw">NanoClaw</a> · ' +
+      '<a href="https://github.com/HKUDS/nanobot">NanoBot</a> · ' +
+      '<a href="https://github.com/sipeed/picoclaw">PicoClaw</a> · ' +
+      '<a href="https://github.com/nearai/ironclaw">IronClaw</a> · ' +
+      '<a href="https://github.com/jlia0/tinyclaw">TinyClaw</a> · ' +
+      '<a href="https://github.com/agent0ai/agent-zero">Agent Zero</a>' +
+      '</p></footer>'
+    );
   </script>
 </body>
 </html>
