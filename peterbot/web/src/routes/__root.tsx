@@ -1,5 +1,6 @@
 import { Outlet, createRootRoute, Navigate } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
+import { Toaster } from "sonner";
 import { isAuthenticated } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 
@@ -30,6 +31,7 @@ function RootComponent() {
     return (
       <div className="min-h-screen bg-background">
         <Outlet />
+        <Toaster position="top-right" />
       </div>
     );
   }
@@ -41,6 +43,7 @@ function RootComponent() {
       <main className="flex-1 overflow-auto p-8">
         <Outlet />
       </main>
+      <Toaster position="top-right" />
     </div>
   );
 }

@@ -1,1 +1,22 @@
-{}
+{
+  "enabled": true,
+  "strict": {
+    "patterns": [
+      "rm\\s+-rf",
+      "sudo\\s+.*",
+      "mkfs.*",
+      ">\\s*/dev/sd"
+    ],
+    "action": "block",
+    "message": "This command is blocked in background tasks for safety."
+  },
+  "warn": {
+    "patterns": [
+      "pip\\s+install",
+      "apt-get",
+      "npm\\s+install"
+    ],
+    "action": "warn",
+    "message": "This may take a while or require permissions."
+  }
+}

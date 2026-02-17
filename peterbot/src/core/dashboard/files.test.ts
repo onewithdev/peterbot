@@ -192,6 +192,7 @@ describe("getConfigFileStats", () => {
 describe("validateBlocklist", () => {
   it("should validate correct blocklist structure", () => {
     const validBlocklist = JSON.stringify({
+      enabled: true,
       strict: {
         patterns: ["rm -rf", "sudo"],
         action: "block",
@@ -205,8 +206,55 @@ describe("validateBlocklist", () => {
     });
 
     const result = validateBlocklist(validBlocklist);
+    expect(result.enabled).toBe(true);
     expect(result.strict.patterns).toEqual(["rm -rf", "sudo"]);
     expect(result.warn.patterns).toEqual(["pip install"]);
+  });
+
+  it("should validate blocklist with enabled set to false", () => {
+    const validBlocklist = JSON.stringify({
+      enabled: false,
+      strict: {
+        patterns: ["rm -rf"],
+        action: "block",
+        message: "Blocked!",
+      },
+      warn: {
+        patterns: [],
+        action: "warn",
+        message: "Warning!",
+      },
+    });
+
+    const result = validateBlocklist(validBlocklist);
+    expect(result.enabled).toBe(false);
+  });
+
+  it("should default enabled to undefined when not provided", () => {
+    const validBlocklist = JSON.stringify({
+      strict: {
+        patterns: ["rm -rf"],
+        action: "block",
+        message: "Blocked!",
+      },
+      warn: {
+        patterns: [],
+        action: "warn",
+        message: "Warning!",
+      },
+    });
+
+    const result = validateBlocklist(validBlocklist);
+    expect(result.enabled).toBeUndefined();
+  });
+
+  it("should throw for invalid enabled type", () => {
+    const invalid = JSON.stringify({
+      enabled: "yes",
+      strict: { patterns: [], action: "block", message: "" },
+      warn: { patterns: [], action: "warn", message: "" },
+    });
+    expect(() => validateBlocklist(invalid)).toThrow("'enabled' must be a boolean");
   });
 
   it("should throw for invalid JSON", () => {
@@ -264,6 +312,7 @@ describe("DEFAULT_CONFIG_CONTENT", () => {
 
   it("should have valid JSON blocklist", () => {
     const parsed = JSON.parse(DEFAULT_CONFIG_CONTENT.blocklist);
+    expect(parsed.enabled).toBe(true);
     expect(parsed.strict).toBeDefined();
     expect(parsed.warn).toBeDefined();
     expect(Array.isArray(parsed.strict.patterns)).toBe(true);

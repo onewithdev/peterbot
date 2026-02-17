@@ -24,6 +24,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { runInSandbox } from "../worker/e2b.js";
+import { checkBlocklist } from "../worker/worker.js";
 
 /**
  * Tool for executing Python code in a secure cloud sandbox.
@@ -57,6 +58,13 @@ const runCode = tool({
   execute: async ({ code, reasoning }) => {
     // Log the reasoning for observability
     console.log(`[AI Tool] runCode invoked: ${reasoning}`);
+
+    // Check blocklist before execution
+    const blockCheck = checkBlocklist(code);
+    if (blockCheck.blocked) {
+      console.log(`[AI Tool] Code blocked by blocklist: ${blockCheck.reason}`);
+      return `Code execution blocked: ${blockCheck.reason}\n\nBlocked pattern detected in code.`;
+    }
 
     // Execute the code in the sandbox
     const result = await runInSandbox(code);

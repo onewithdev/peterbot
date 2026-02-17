@@ -259,6 +259,7 @@ Professional but approachable. Efficient yet warm.
 `,
   blocklist: JSON.stringify(
     {
+      enabled: true,
       strict: {
         patterns: [
           "rm\\s+-rf",
@@ -300,6 +301,7 @@ export async function resetConfigFile(type: ConfigFileType): Promise<string> {
  * @throws Error if invalid JSON or structure
  */
 export function validateBlocklist(content: string): {
+  enabled: boolean;
   strict: { patterns: string[]; action: string; message: string };
   warn: { patterns: string[]; action: string; message: string };
 } {
@@ -317,6 +319,11 @@ export function validateBlocklist(content: string): {
 
   const obj = parsed as Record<string, unknown>;
 
+  // Validate enabled flag (optional, defaults to true)
+  if (obj.enabled !== undefined && typeof obj.enabled !== "boolean") {
+    throw new Error("Invalid structure: 'enabled' must be a boolean");
+  }
+
   // Validate strict block
   if (!obj.strict || typeof obj.strict !== "object") {
     throw new Error("Invalid structure: missing 'strict' block");
@@ -328,6 +335,7 @@ export function validateBlocklist(content: string): {
   }
 
   return parsed as {
+    enabled: boolean;
     strict: { patterns: string[]; action: string; message: string };
     warn: { patterns: string[]; action: string; message: string };
   };

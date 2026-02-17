@@ -282,6 +282,7 @@ const app = new Hono()
 
     return c.json({
       data: parsed as {
+        enabled: boolean;
         strict: { patterns: string[]; action: string; message: string };
         warn: { patterns: string[]; action: string; message: string };
       },

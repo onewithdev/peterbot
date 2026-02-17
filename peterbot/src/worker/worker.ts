@@ -29,6 +29,8 @@
 
 import { generateText } from "ai";
 import { Bot } from "grammy";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { getModel } from "../ai/client.js";
 import { peterbotTools } from "../ai/tools.js";
 import {
@@ -42,6 +44,7 @@ import {
 import type { Job } from "../features/jobs/schema.js";
 import { config } from "../shared/config.js";
 import { db } from "../db/index.js";
+import { readConfigFile } from "../core/dashboard/files.js";
 
 // Force early validation of required config (throws if missing)
 config.googleApiKey;
@@ -63,14 +66,31 @@ const TELEGRAM_BOT_TOKEN = config.telegramBotToken;
  * Build the system prompt for the AI model.
  *
  * Defines peterbot's role, capabilities, and response format.
+ * Includes soul.md and memory.md content if available.
  * Includes current date context for time-aware responses.
  *
  * @returns System prompt string for the AI model
  */
-export function buildSystemPrompt(): string {
+export async function buildSystemPrompt(): Promise<string> {
   const today = new Date().toDateString();
 
-  return [
+  // Read configuration files
+  let soulContent: string | null = null;
+  let memoryContent: string | null = null;
+
+  try {
+    soulContent = await readConfigFile("soul");
+  } catch (error) {
+    console.warn("[Worker] Failed to read soul.md:", error instanceof Error ? error.message : String(error));
+  }
+
+  try {
+    memoryContent = await readConfigFile("memory");
+  } catch (error) {
+    console.warn("[Worker] Failed to read memory.md:", error instanceof Error ? error.message : String(error));
+  }
+
+  const sections: string[] = [
     "You are peterbot, a helpful AI assistant integrated with Telegram.",
     "",
     "Your capabilities include:",
@@ -83,12 +103,28 @@ export function buildSystemPrompt(): string {
     "",
     "When given computational tasks (data analysis, calculations, file creation, etc.),",
     "use the runCode tool to execute Python code in a secure sandbox environment.",
+  ];
+
+  // Add soul content if available
+  if (soulContent) {
+    sections.push("", "=== PERSONALITY ===", "", soulContent);
+  }
+
+  // Add memory content if available
+  if (memoryContent) {
+    sections.push("", "=== USER MEMORY ===", "", memoryContent);
+  }
+
+  // Add current date
+  sections.push(
     "",
     `Current date: ${today}`,
     "",
     "Format your responses using Markdown for better readability when appropriate.",
-    "Be concise but thorough in your responses.",
-  ].join("\n");
+    "Be concise but thorough in your responses."
+  );
+
+  return sections.join("\n");
 }
 
 /**
@@ -237,6 +273,99 @@ async function notifyFailure(job: Job, error: string): Promise<void> {
 }
 
 /**
+ * Check if code matches any blocklist patterns.
+ *
+ * Reads the blocklist configuration and tests the code against
+ * strict patterns. Returns block status and reason if blocked.
+ * Also checks warn patterns and returns warn status/message if matched.
+ *
+ * @param code - The code to check
+ * @returns Object with blocked status, optional reason, warn status, and warn message
+ */
+export function checkBlocklist(code: string): {
+  blocked: boolean;
+  reason?: string;
+  warn?: boolean;
+  warnMessage?: string;
+} {
+  try {
+    // Read blocklist file synchronously for use in tool handler
+    const blocklistPath = join(process.cwd(), "config/blocklist.json");
+
+    let content: string;
+    try {
+      content = readFileSync(blocklistPath, "utf-8");
+    } catch {
+      // File doesn't exist, allow execution
+      return { blocked: false };
+    }
+
+    let parsed: {
+      enabled?: boolean;
+      strict?: { patterns: string[]; message: string };
+      warn?: { patterns: string[]; message: string };
+    };
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      // Invalid JSON, log warning and allow execution
+      console.warn("[Worker] Invalid blocklist JSON, allowing execution");
+      return { blocked: false };
+    }
+
+    // Check if blocklist is disabled
+    if (parsed.enabled === false) {
+      return { blocked: false };
+    }
+
+    // Check strict patterns
+    const strictPatterns = parsed.strict?.patterns ?? [];
+    const strictMessage = parsed.strict?.message ?? "This command is blocked for safety.";
+
+    for (const pattern of strictPatterns) {
+      try {
+        const regex = new RegExp(pattern, "i");
+        if (regex.test(code)) {
+          return {
+            blocked: true,
+            reason: strictMessage,
+          };
+        }
+      } catch {
+        // Invalid regex pattern, skip it
+        console.warn(`[Worker] Invalid blocklist pattern: ${pattern}`);
+      }
+    }
+
+    // Check warn patterns
+    const warnPatterns = parsed.warn?.patterns ?? [];
+    const warnMessage = parsed.warn?.message ?? "This command may have side effects.";
+
+    for (const pattern of warnPatterns) {
+      try {
+        const regex = new RegExp(pattern, "i");
+        if (regex.test(code)) {
+          return {
+            blocked: false,
+            warn: true,
+            warnMessage,
+          };
+        }
+      } catch {
+        // Invalid regex pattern, skip it
+        console.warn(`[Worker] Invalid blocklist warn pattern: ${pattern}`);
+      }
+    }
+
+    return { blocked: false };
+  } catch (error) {
+    // Any error, log warning and allow execution (fail open)
+    console.warn("[Worker] Blocklist check failed:", error instanceof Error ? error.message : String(error));
+    return { blocked: false };
+  }
+}
+
+/**
  * Process a single job through the AI pipeline.
  *
  * Handles the complete job lifecycle:
@@ -257,6 +386,9 @@ async function processJob(job: Job): Promise<void> {
   await markJobRunning(db, job.id);
 
   try {
+    // Build system prompt (now async to read config files)
+    const systemPrompt = await buildSystemPrompt();
+
     // Determine if this task needs code execution tools
     const tools = shouldUseE2B(job.input) ? peterbotTools : undefined;
 
@@ -267,7 +399,7 @@ async function processJob(job: Job): Promise<void> {
     // Call the AI model
     const result = await generateText({
       model: getModel(),
-      system: buildSystemPrompt(),
+      system: systemPrompt,
       prompt: job.input,
       tools,
       maxSteps: 10,

@@ -1,28 +1,49 @@
-import { describe, test, expect } from "bun:test";
-import { buildSystemPrompt, shouldUseE2B } from "./worker";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { buildSystemPrompt, shouldUseE2B, checkBlocklist } from "./worker";
+import { mkdir, writeFile, rm } from "fs/promises";
+import { join } from "path";
+
+// Test directory for blocklist tests
+const TEST_CONFIG_DIR = join(process.cwd(), "test-temp", "config");
+const TEST_BLOCKLIST_PATH = join(TEST_CONFIG_DIR, "blocklist.json");
+
+// Helper to write test blocklist
+async function writeTestBlocklist(content: object): Promise<void> {
+  await mkdir(TEST_CONFIG_DIR, { recursive: true });
+  await writeFile(TEST_BLOCKLIST_PATH, JSON.stringify(content, null, 2));
+}
+
+// Helper to clean up test blocklist
+async function cleanupTestBlocklist(): Promise<void> {
+  try {
+    await rm(TEST_CONFIG_DIR, { recursive: true, force: true });
+  } catch {
+    // Ignore cleanup errors
+  }
+}
 
 describe("Worker", () => {
   describe("buildSystemPrompt()", () => {
-    test("returns a non-empty string containing 'peterbot'", () => {
-      const prompt = buildSystemPrompt();
+    test("returns a non-empty string containing 'peterbot'", async () => {
+      const prompt = await buildSystemPrompt();
       expect(typeof prompt).toBe("string");
       expect(prompt.length).toBeGreaterThan(0);
       expect(prompt.toLowerCase()).toContain("peterbot");
     });
 
-    test("includes current date context", () => {
-      const prompt = buildSystemPrompt();
+    test("includes current date context", async () => {
+      const prompt = await buildSystemPrompt();
       const today = new Date().toDateString();
       expect(prompt).toContain(today);
     });
 
-    test("contains instructions for code execution", () => {
-      const prompt = buildSystemPrompt();
+    test("contains instructions for code execution", async () => {
+      const prompt = await buildSystemPrompt();
       expect(prompt.toLowerCase()).toContain("runCode".toLowerCase());
     });
 
-    test("mentions Markdown formatting", () => {
-      const prompt = buildSystemPrompt();
+    test("mentions Markdown formatting", async () => {
+      const prompt = await buildSystemPrompt();
       expect(prompt.toLowerCase()).toContain("markdown");
     });
   });
@@ -128,6 +149,173 @@ describe("Worker", () => {
 
     test("handles multiple keywords", () => {
       expect(shouldUseE2B("Download the CSV and analyze the data")).toBe(true);
+    });
+  });
+
+  describe("checkBlocklist()", () => {
+    const originalCwd = process.cwd;
+
+    beforeEach(async () => {
+      // Mock process.cwd to return test directory
+      process.cwd = () => join(TEST_CONFIG_DIR, "..");
+      await cleanupTestBlocklist();
+    });
+
+    afterEach(async () => {
+      process.cwd = originalCwd;
+      await cleanupTestBlocklist();
+    });
+
+    test("returns blocked: false when no blocklist file exists", () => {
+      const result = checkBlocklist("rm -rf /");
+      expect(result.blocked).toBe(false);
+    });
+
+    test("blocks code matching strict patterns", async () => {
+      await writeTestBlocklist({
+        enabled: true,
+        strict: {
+          patterns: ["rm\\s+-rf"],
+          action: "block",
+          message: "This command is blocked!",
+        },
+        warn: {
+          patterns: [],
+          action: "warn",
+          message: "Warning!",
+        },
+      });
+
+      const result = checkBlocklist("rm -rf /");
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toBe("This command is blocked!");
+    });
+
+    test("allows code not matching any patterns", async () => {
+      await writeTestBlocklist({
+        enabled: true,
+        strict: {
+          patterns: ["rm\\s+-rf"],
+          action: "block",
+          message: "This command is blocked!",
+        },
+        warn: {
+          patterns: [],
+          action: "warn",
+          message: "Warning!",
+        },
+      });
+
+      const result = checkBlocklist("echo hello");
+      expect(result.blocked).toBe(false);
+    });
+
+    test("returns blocked: false when enabled is false", async () => {
+      await writeTestBlocklist({
+        enabled: false,
+        strict: {
+          patterns: ["rm\\s+-rf"],
+          action: "block",
+          message: "This command is blocked!",
+        },
+        warn: {
+          patterns: [],
+          action: "warn",
+          message: "Warning!",
+        },
+      });
+
+      const result = checkBlocklist("rm -rf /");
+      expect(result.blocked).toBe(false);
+    });
+
+    test("returns warn: true when matching warn patterns", async () => {
+      await writeTestBlocklist({
+        enabled: true,
+        strict: {
+          patterns: [],
+          action: "block",
+          message: "Blocked!",
+        },
+        warn: {
+          patterns: ["pip\\s+install"],
+          action: "warn",
+          message: "This may take a while!",
+        },
+      });
+
+      const result = checkBlocklist("pip install requests");
+      expect(result.blocked).toBe(false);
+      expect(result.warn).toBe(true);
+      expect(result.warnMessage).toBe("This may take a while!");
+    });
+
+    test("strict patterns take precedence over warn patterns", async () => {
+      await writeTestBlocklist({
+        enabled: true,
+        strict: {
+          patterns: ["rm\\s+-rf"],
+          action: "block",
+          message: "Blocked!",
+        },
+        warn: {
+          patterns: ["rm"],
+          action: "warn",
+          message: "Warning!",
+        },
+      });
+
+      const result = checkBlocklist("rm -rf /");
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toBe("Blocked!");
+      // Should not check warn patterns if blocked
+      expect(result.warn).toBeUndefined();
+    });
+
+    test("handles invalid regex patterns gracefully", async () => {
+      await writeTestBlocklist({
+        enabled: true,
+        strict: {
+          patterns: ["[invalid", "rm\\s+-rf"],
+          action: "block",
+          message: "Blocked!",
+        },
+        warn: {
+          patterns: [],
+          action: "warn",
+          message: "Warning!",
+        },
+      });
+
+      const result = checkBlocklist("rm -rf /");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("handles invalid JSON gracefully", async () => {
+      await mkdir(TEST_CONFIG_DIR, { recursive: true });
+      await writeFile(TEST_BLOCKLIST_PATH, "not valid json");
+
+      const result = checkBlocklist("rm -rf /");
+      expect(result.blocked).toBe(false);
+    });
+
+    test("is case-insensitive", async () => {
+      await writeTestBlocklist({
+        enabled: true,
+        strict: {
+          patterns: ["rm\\s+-rf"],
+          action: "block",
+          message: "Blocked!",
+        },
+        warn: {
+          patterns: [],
+          action: "warn",
+          message: "Warning!",
+        },
+      });
+
+      const result = checkBlocklist("RM -RF /");
+      expect(result.blocked).toBe(true);
     });
   });
 });
