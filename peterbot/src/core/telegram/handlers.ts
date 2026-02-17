@@ -9,6 +9,7 @@ import {
 } from "../../features/jobs/repository";
 import { formatJobsForStatus } from "../../features/jobs/service";
 import { getModel } from "../../ai/client";
+import { config } from "../../shared/config.js";
 import type { Job } from "../../features/jobs/schema";
 
 /**
@@ -51,7 +52,7 @@ export function formatStatusReply(jobs: Job[]): string {
  */
 export function setupHandlers(bot: Bot): void {
   // Ejection point 1: remove this check when adding multi-user support
-  const authorizedChatId = process.env.TELEGRAM_CHAT_ID;
+  const authorizedChatId = config.telegramChatId;
 
   // Auth guard middleware
   bot.use(async (ctx, next) => {

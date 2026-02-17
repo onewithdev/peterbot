@@ -1,5 +1,6 @@
 import { Bot } from "grammy";
-import { setupHandlers } from "./handlers";
+import { setupHandlers } from "./handlers.js";
+import { config } from "../../shared/config.js";
 
 /**
  * Bot singleton instance.
@@ -27,13 +28,7 @@ let bot: Bot | null = null;
  */
 export function getBot(): Bot {
   if (bot === null) {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-
-    if (!token) {
-      throw new Error("TELEGRAM_BOT_TOKEN is not set in .env");
-    }
-
-    bot = new Bot(token);
+    bot = new Bot(config.telegramBotToken);
     setupHandlers(bot);
   }
 

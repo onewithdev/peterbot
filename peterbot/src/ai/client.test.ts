@@ -7,7 +7,7 @@ describe("AI Client", () => {
 
   beforeEach(() => {
     // Reset env to known state before each test
-    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
     delete process.env.MODEL;
   });
 
@@ -17,8 +17,8 @@ describe("AI Client", () => {
   });
 
   describe("getModel()", () => {
-    test("throws if ANTHROPIC_API_KEY is missing", () => {
-      expect(() => getModel()).toThrow("ANTHROPIC_API_KEY is required");
+    test("throws if GOOGLE_API_KEY is missing", () => {
+      expect(() => getModel()).toThrow("GOOGLE_API_KEY is required");
     });
 
     test("throws with helpful message when key is missing", () => {
@@ -26,28 +26,28 @@ describe("AI Client", () => {
     });
 
     test("uses default model when MODEL env is not set", () => {
-      process.env.ANTHROPIC_API_KEY = "test-api-key";
+      process.env.GOOGLE_API_KEY = "test-api-key";
       
       // Should not throw - model object is returned
       const model = getModel();
       expect(model).toBeDefined();
-      expect(model.modelId).toBe("claude-sonnet-4-5-20250929");
+      expect(model.modelId).toBe("gemini-2.5-flash");
     });
 
     test("uses custom model when MODEL env is set", () => {
-      process.env.ANTHROPIC_API_KEY = "test-api-key";
-      process.env.MODEL = "claude-opus-4";
+      process.env.GOOGLE_API_KEY = "test-api-key";
+      process.env.MODEL = "gemini-2.0-pro";
       
       // Should not throw - model object is returned
       const model = getModel();
       expect(model).toBeDefined();
-      expect(model.modelId).toBe("claude-opus-4");
+      expect(model.modelId).toBe("gemini-2.0-pro");
     });
 
     test("handles empty string API key as missing", () => {
-      process.env.ANTHROPIC_API_KEY = "";
+      process.env.GOOGLE_API_KEY = "";
       
-      expect(() => getModel()).toThrow("ANTHROPIC_API_KEY is required");
+      expect(() => getModel()).toThrow("GOOGLE_API_KEY is required");
     });
   });
 });

@@ -18,7 +18,7 @@ describe("E2B Sandbox", () => {
     test("returns error when E2B_API_KEY is missing", async () => {
       const result: SandboxResult = await runInSandbox("print('hello')");
 
-      expect(result.error).toContain("E2B_API_KEY is not set");
+      expect(result.error).toContain("Missing required environment variable: E2B_API_KEY");
       expect(result.stdout).toBe("");
       expect(result.stderr).toBe("");
       expect(result.artifacts).toEqual([]);
@@ -27,7 +27,7 @@ describe("E2B Sandbox", () => {
     test("returns helpful error message with dashboard URL", async () => {
       const result: SandboxResult = await runInSandbox("print('hello')");
 
-      expect(result.error).toContain("https://e2b.dev/dashboard");
+      expect(result.error).toContain("See .env.example for reference");
     });
 
     test("handles invalid API key gracefully", async () => {

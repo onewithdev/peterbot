@@ -21,6 +21,7 @@ import { Sandbox } from "@e2b/code-interpreter";
 import { mkdirSync } from "fs";
 import { writeFile } from "fs/promises";
 import { join } from "path";
+import { config } from "../shared/config.js";
 
 /**
  * Result of a sandbox execution.
@@ -51,6 +52,8 @@ const SANDBOX_TIMEOUT_MS = 300_000;
  */
 const SANDBOX_USER_DIR = "/home/user";
 
+
+
 /**
  * Execute Python code in an ephemeral E2B sandbox.
  *
@@ -58,22 +61,11 @@ const SANDBOX_USER_DIR = "/home/user";
  * @returns SandboxResult containing stdout, stderr, artifacts, and any error
  */
 export async function runInSandbox(code: string): Promise<SandboxResult> {
-  const apiKey = process.env.E2B_API_KEY;
-
-  if (!apiKey) {
-    return {
-      stdout: "",
-      stderr: "",
-      artifacts: [],
-      error:
-        "E2B_API_KEY is not set. Get your API key at https://e2b.dev/dashboard",
-    };
-  }
-
   let sandbox: Sandbox | undefined;
 
   try {
     // Create ephemeral sandbox with timeout
+    const apiKey = config.e2bApiKey;
     sandbox = await Sandbox.create(apiKey, {
       timeoutMs: SANDBOX_TIMEOUT_MS,
     });

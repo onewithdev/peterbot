@@ -40,6 +40,11 @@ import {
   incrementJobRetryCount,
 } from "../features/jobs/repository.js";
 import type { Job } from "../features/jobs/schema.js";
+import { config } from "../shared/config.js";
+
+// Force early validation of required config (throws if missing)
+config.googleApiKey;
+config.e2bApiKey;
 
 /**
  * Polling interval in milliseconds.
@@ -48,9 +53,10 @@ import type { Job } from "../features/jobs/schema.js";
 const POLL_INTERVAL_MS = 5000;
 
 /**
- * Telegram bot token from environment variables.
+ * Telegram bot token from centralized config.
+ * Throws immediately at startup if not configured.
  */
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_BOT_TOKEN = config.telegramBotToken;
 
 /**
  * Build the system prompt for the AI model.
