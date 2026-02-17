@@ -41,7 +41,7 @@ export function formatJob(job: Job): string {
   return message;
 }
 
-export function formatStatusMessage(jobs: Job[]): string {
+export function formatJobsForStatus(jobs: Job[]): string {
   if (jobs.length === 0) {
     return "📭 No jobs found. Send me a task to get started!";
   }

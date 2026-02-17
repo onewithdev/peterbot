@@ -9,9 +9,9 @@ import { db } from "../src/db";
 import {
   createJob,
   getJobById,
-  markRunning,
-  markCompleted,
-  markFailed,
+  markJobRunning,
+  markJobCompleted,
+  markJobFailed,
 } from "../src/features/jobs/repository";
 import { eq } from "drizzle-orm";
 import { jobs } from "../src/features/jobs/schema";
@@ -87,7 +87,7 @@ async function runTracer(): Promise<void> {
 
     // Mark as running
     logInfo("Updating status to 'running'...");
-    await markRunning(testJobId);
+    await markJobRunning(testJobId);
     let job = await getJobById(testJobId);
     if (job?.status !== "running") {
       throw new Error("Failed to update status to 'running'");
@@ -96,7 +96,7 @@ async function runTracer(): Promise<void> {
 
     // Mark as completed
     logInfo("Updating status to 'completed'...");
-    await markCompleted(testJobId, "Hello from the tracer!");
+    await markJobCompleted(testJobId, "Hello from the tracer!");
     job = await getJobById(testJobId);
     if (job?.status !== "completed") {
       throw new Error("Failed to update status to 'completed'");

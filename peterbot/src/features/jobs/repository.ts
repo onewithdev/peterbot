@@ -1,32 +1,37 @@
 import { eq, and, desc } from "drizzle-orm";
-import { db } from "../../db";
+import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { db as defaultDb } from "../../db";
+import * as schema from "../../db/schema";
 import { jobs, type Job, type NewJob } from "./schema";
 
-export async function createJob(input: NewJob): Promise<Job> {
-  const id = crypto.randomUUID();
-  const now = new Date();
+export async function createJob(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb,
+  input: NewJob
+): Promise<Job> {
+  const result = await db
+    .insert(jobs)
+    .values({
+      type: input.type,
+      input: input.input,
+      chatId: input.chatId,
+    })
+    .returning();
 
-  const newJob: NewJob = {
-    id,
-    type: input.type,
-    status: "pending",
-    input: input.input,
-    chatId: input.chatId,
-    delivered: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await db.insert(jobs).values(newJob);
-  return newJob as Job;
+  return result[0];
 }
 
-export async function getJobById(id: string): Promise<Job | undefined> {
+export async function getJobById(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb,
+  id: string
+): Promise<Job | undefined> {
   const result = await db.select().from(jobs).where(eq(jobs.id, id)).limit(1);
   return result[0];
 }
 
-export async function getJobsByChatId(chatId: string): Promise<Job[]> {
+export async function getJobsByChatId(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb,
+  chatId: string
+): Promise<Job[]> {
   return await db
     .select()
     .from(jobs)
@@ -35,7 +40,10 @@ export async function getJobsByChatId(chatId: string): Promise<Job[]> {
     .limit(20);
 }
 
-export async function getPendingJobs(limit = 5): Promise<Job[]> {
+export async function getPendingJobs(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb,
+  limit = 5
+): Promise<Job[]> {
   return await db
     .select()
     .from(jobs)
@@ -44,7 +52,9 @@ export async function getPendingJobs(limit = 5): Promise<Job[]> {
     .limit(limit);
 }
 
-export async function getUndeliveredJobs(): Promise<Job[]> {
+export async function getUndeliveredJobs(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb
+): Promise<Job[]> {
   return await db
     .select()
     .from(jobs)
@@ -52,7 +62,10 @@ export async function getUndeliveredJobs(): Promise<Job[]> {
     .orderBy(desc(jobs.createdAt));
 }
 
-export async function markRunning(id: string): Promise<void> {
+export async function markJobRunning(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb,
+  id: string
+): Promise<void> {
   await db
     .update(jobs)
     .set({
@@ -62,7 +75,11 @@ export async function markRunning(id: string): Promise<void> {
     .where(eq(jobs.id, id));
 }
 
-export async function markCompleted(id: string, output: string): Promise<void> {
+export async function markJobCompleted(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb,
+  id: string,
+  output: string
+): Promise<void> {
   await db
     .update(jobs)
     .set({
@@ -73,7 +90,11 @@ export async function markCompleted(id: string, output: string): Promise<void> {
     .where(eq(jobs.id, id));
 }
 
-export async function markFailed(id: string, error: string): Promise<void> {
+export async function markJobFailed(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb,
+  id: string,
+  error: string
+): Promise<void> {
   await db
     .update(jobs)
     .set({
@@ -84,7 +105,10 @@ export async function markFailed(id: string, error: string): Promise<void> {
     .where(eq(jobs.id, id));
 }
 
-export async function markDelivered(id: string): Promise<void> {
+export async function markJobDelivered(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb,
+  id: string
+): Promise<void> {
   await db
     .update(jobs)
     .set({

@@ -8,8 +8,8 @@ export const jobs = sqliteTable("jobs", {
   })
     .notNull()
     .default("pending"),
-  description: text("description").notNull(),
-  result: text("result"),
+  input: text("input").notNull(),
+  output: text("output"),
   chatId: text("chat_id").notNull(),
   delivered: integer("delivered", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
