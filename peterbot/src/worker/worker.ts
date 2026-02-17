@@ -1,0 +1,282 @@
+/**
+ * Background Worker Module
+ *
+ * This module implements the background job processor that polls the database
+ * for pending jobs, processes them using the AI layer, and delivers results
+ * via Telegram. It follows a polling loop pattern with sequential job processing.
+ *
+ * ## Architecture
+ *
+ * 1. **Polling Loop**: Infinite loop that checks for pending jobs every 5 seconds
+ * 2. **Job Processing**: Sequential processing of jobs with status transitions
+ * 3. **AI Integration**: Conditional tool availability based on task heuristics
+ * 4. **Delivery**: Automatic result delivery via Telegram Bot API
+ *
+ * ## Job Lifecycle
+ *
+ * ```
+ * pending → running → completed → delivered
+ *                   └→ failed
+ * ```
+ *
+ * ## Usage
+ *
+ * Start the worker:
+ * ```bash
+ * bun run src/worker/worker.ts
+ * ```
+ */
+
+import { generateText } from "ai";
+import { Bot } from "grammy";
+import { getModel } from "../ai/client.js";
+import { peterbotTools } from "../ai/tools.js";
+import {
+  getPendingJobs,
+  markJobRunning,
+  markJobCompleted,
+  markJobFailed,
+  markJobDelivered,
+} from "../features/jobs/repository.js";
+import type { Job } from "../features/jobs/schema.js";
+
+/**
+ * Polling interval in milliseconds.
+ * The worker checks for pending jobs every 5 seconds.
+ */
+const POLL_INTERVAL_MS = 5000;
+
+/**
+ * Telegram bot token from environment variables.
+ */
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+/**
+ * Build the system prompt for the AI model.
+ *
+ * Defines peterbot's role, capabilities, and response format.
+ * Includes current date context for time-aware responses.
+ *
+ * @returns System prompt string for the AI model
+ */
+export function buildSystemPrompt(): string {
+  const today = new Date().toDateString();
+
+  return [
+    "You are peterbot, a helpful AI assistant integrated with Telegram.",
+    "",
+    "Your capabilities include:",
+    "- Answering questions and explaining concepts",
+    "- Writing and analyzing code",
+    "- Performing data analysis and calculations",
+    "- Creating visualizations and charts",
+    "- Web scraping and API interactions",
+    "- File processing and generation",
+    "",
+    "When given computational tasks (data analysis, calculations, file creation, etc.),",
+    "use the runCode tool to execute Python code in a secure sandbox environment.",
+    "",
+    `Current date: ${today}`,
+    "",
+    "Format your responses using Markdown for better readability when appropriate.",
+    "Be concise but thorough in your responses.",
+  ].join("\n");
+}
+
+/**
+ * Keywords that indicate a task likely needs code execution.
+ */
+const E2B_KEYWORDS = [
+  "csv",
+  "chart",
+  "graph",
+  "plot",
+  "script",
+  "code",
+  "calculate",
+  "scrape",
+  "download",
+  "data",
+  "analysis",
+  "analyze",
+  "analyse",
+  "spreadsheet",
+  "excel",
+  "json",
+  "api call",
+  "fetch",
+];
+
+/**
+ * Determine if a task likely needs E2B code execution.
+ *
+ * Uses keyword heuristics to decide whether to attach the runCode tool.
+ * This optimizes API costs by only enabling tool calling when needed.
+ *
+ * @param input - The user's task input
+ * @returns true if the task likely needs code execution
+ */
+export function shouldUseE2B(input: string): boolean {
+  const lowerInput = input.toLowerCase();
+  return E2B_KEYWORDS.some((keyword) => lowerInput.includes(keyword));
+}
+
+/**
+ * Deliver a completed job result to the user via Telegram.
+ *
+ * Sends a success message with the result and marks the job as delivered.
+ *
+ * @param job - The completed job
+ * @param result - The result text to deliver
+ */
+async function deliverResult(job: Job, result: string): Promise<void> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log(`[Worker] No TELEGRAM_BOT_TOKEN, skipping delivery for job ${job.id.slice(0, 8)}`);
+    return;
+  }
+
+  try {
+    const bot = new Bot(TELEGRAM_BOT_TOKEN);
+    const shortId = job.id.slice(0, 8);
+
+    await bot.api.sendMessage(
+      job.chatId,
+      `✅ Task complete! [${shortId}]\n\n${result}`,
+      { parse_mode: "Markdown" }
+    );
+
+    await markJobDelivered(job.id);
+    console.log(`[Worker] Delivered result for job ${shortId}`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[Worker] Failed to deliver result for job ${job.id.slice(0, 8)}:`, errorMessage);
+  }
+}
+
+/**
+ * Notify the user of a job failure via Telegram.
+ *
+ * Sends an error message with retry instructions.
+ *
+ * @param job - The failed job
+ * @param error - The error message
+ */
+async function notifyFailure(job: Job, error: string): Promise<void> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log(`[Worker] No TELEGRAM_BOT_TOKEN, skipping failure notification for job ${job.id.slice(0, 8)}`);
+    return;
+  }
+
+  try {
+    const bot = new Bot(TELEGRAM_BOT_TOKEN);
+    const shortId = job.id.slice(0, 8);
+
+    await bot.api.sendMessage(
+      job.chatId,
+      `❌ Task failed [${shortId}]\n\nError: ${error}\n\nReply "retry ${shortId}" to try again.`
+    );
+
+    console.log(`[Worker] Sent failure notification for job ${shortId}`);
+  } catch (notifyError) {
+    const errorMessage = notifyError instanceof Error ? notifyError.message : String(notifyError);
+    console.error(`[Worker] Failed to send failure notification for job ${job.id.slice(0, 8)}:`, errorMessage);
+  }
+}
+
+/**
+ * Process a single job through the AI pipeline.
+ *
+ * Handles the complete job lifecycle:
+ * 1. Marks job as running
+ * 2. Determines if tools are needed
+ * 3. Calls AI with appropriate configuration
+ * 4. Marks job as completed or failed
+ * 5. Delivers result or notifies of failure
+ *
+ * @param job - The job to process
+ */
+async function processJob(job: Job): Promise<void> {
+  const shortId = job.id.slice(0, 8);
+  const inputPreview = job.input.length > 50 ? `${job.input.slice(0, 50)}...` : job.input;
+
+  console.log(`[Worker] Processing job ${shortId}: "${inputPreview}"`);
+
+  await markJobRunning(job.id);
+
+  try {
+    // Determine if this task needs code execution tools
+    const tools = shouldUseE2B(job.input) ? peterbotTools : undefined;
+
+    if (tools) {
+      console.log(`[Worker] Job ${shortId} requires code execution, enabling tools`);
+    }
+
+    // Call the AI model
+    const result = await generateText({
+      model: getModel(),
+      system: buildSystemPrompt(),
+      prompt: job.input,
+      tools,
+      maxSteps: 10,
+    });
+
+    const output = result.text;
+
+    // Mark job as completed
+    await markJobCompleted(job.id, output);
+    console.log(`[Worker] Job ${shortId} completed`);
+
+    // Deliver the result
+    await deliverResult(job, output);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Mark job as failed
+    await markJobFailed(job.id, errorMessage);
+    console.error(`[Worker] Job ${shortId} failed:`, errorMessage);
+
+    // Notify user of failure
+    await notifyFailure(job, errorMessage);
+  }
+}
+
+/**
+ * Main polling loop for the worker.
+ *
+ * Continuously polls for pending jobs and processes them sequentially.
+ * Errors in the poll loop are caught and logged without exiting.
+ */
+async function pollLoop(): Promise<void> {
+  console.log(`[Worker] Starting background worker (poll interval: ${POLL_INTERVAL_MS}ms)`);
+
+  while (true) {
+    try {
+      // Fetch pending jobs
+      const jobs = await getPendingJobs();
+
+      if (jobs.length > 0) {
+        console.log(`[Worker] Found ${jobs.length} pending job(s)`);
+      }
+
+      // Process each job sequentially
+      for (const job of jobs) {
+        await processJob(job);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("[Worker] Error in poll loop:", errorMessage);
+    }
+
+    // Sleep before next poll
+    await Bun.sleep(POLL_INTERVAL_MS);
+  }
+}
+
+// Start the worker if this file is run directly
+if (import.meta.main) {
+  pollLoop().catch((error) => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[Worker] Fatal error:", errorMessage);
+    process.exit(1);
+  });
+}
