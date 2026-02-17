@@ -23,7 +23,7 @@
       --gap: 24px;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
     body {
       background: var(--bg);
       color: var(--text);
@@ -50,13 +50,13 @@
   </style>
 </head>
 <body>
-  <nav>
-    <span class="logo">🦀 The Claw Family</span>
+  <nav aria-label="Main">
+    <span class="logo"><span aria-hidden="true">🦀</span> The Claw Family</span>
     <a href="#gallery">Frameworks</a>
     <a href="#compare">Compare</a>
     <a href="#builder">Builder</a>
   </nav>
-  <div id="hero"></div>
+  <div id="hero" role="banner"><!-- Hero content injected by Task 3 --></div>
   <section id="gallery">
     <h2>Frameworks</h2>
     <p class="section-sub">Click any card to expand details.</p>
