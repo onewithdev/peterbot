@@ -47,6 +47,46 @@
     section { padding: 80px 32px; max-width: 1280px; margin: 0 auto; }
     h2 { font-size: 2rem; font-weight: 800; margin-bottom: 8px; }
     .section-sub { color: var(--muted); margin-bottom: 48px; }
+    #hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center;
+      position: relative; overflow: hidden;
+      padding: 80px 32px;
+    }
+    #hero-canvas {
+      position: absolute; inset: 0;
+      opacity: 0.4; pointer-events: none;
+    }
+    .hero-title {
+      font-size: clamp(2.5rem, 6vw, 5rem);
+      font-weight: 900;
+      letter-spacing: -2px;
+      background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      position: relative; z-index: 1;
+    }
+    .hero-sub {
+      color: var(--muted); font-size: 1.2rem;
+      max-width: 560px; margin: 16px auto 48px;
+      position: relative; z-index: 1;
+    }
+    .hero-badges {
+      display: flex; flex-wrap: wrap; gap: 12px;
+      justify-content: center;
+      position: relative; z-index: 1;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 16px; border-radius: 9999px;
+      font-size: 0.85rem; font-weight: 700;
+      text-decoration: none; color: #fff;
+      transition: transform 0.2s, opacity 0.2s;
+      border: 2px solid transparent;
+    }
+    .hero-badge:hover { transform: translateY(-2px); opacity: 0.9; }
   </style>
 </head>
 <body>
@@ -267,6 +307,61 @@ const FEATURES = [
   { key: 'openSource',      label: 'Open Source',         icon: '🔓' },
   { key: 'multiPlatform',   label: 'Multi-Platform',      icon: '📱' },
 ];
+    function renderHero() {
+      const el = document.getElementById('hero');
+      const canvas = document.createElement('canvas');
+      canvas.id = 'hero-canvas';
+      el.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const resize = () => { canvas.width = el.offsetWidth; canvas.height = el.offsetHeight; };
+      resize();
+      window.addEventListener('resize', resize);
+      const dots = Array.from({ length: 60 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        color: FRAMEWORKS[Math.floor(Math.random() * FRAMEWORKS.length)].color,
+      }));
+      function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        dots.forEach(d => {
+          d.x += d.vx; d.y += d.vy;
+          if (d.x < 0 || d.x > canvas.width) d.vx *= -1;
+          if (d.y < 0 || d.y > canvas.height) d.vy *= -1;
+          ctx.beginPath();
+          ctx.arc(d.x, d.y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = d.color;
+          ctx.fill();
+        });
+        for (let i = 0; i < dots.length; i++) {
+          for (let j = i + 1; j < dots.length; j++) {
+            const dx = dots[i].x - dots[j].x;
+            const dy = dots[i].y - dots[j].y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < 120) {
+              ctx.beginPath();
+              ctx.moveTo(dots[i].x, dots[i].y);
+              ctx.lineTo(dots[j].x, dots[j].y);
+              ctx.strokeStyle = dots[i].color + Math.floor((1 - dist/120) * 40).toString(16).padStart(2,'0');
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+          }
+        }
+        requestAnimationFrame(animate);
+      }
+      animate();
+      const content = document.createElement('div');
+      content.innerHTML =
+        '<h1 class="hero-title">The Claw Family</h1>' +
+        '<p class="hero-sub">A non-technical guide to choosing, comparing, and combining AI assistant frameworks. Eight projects. One page.</p>' +
+        '<div class="hero-badges">' +
+        FRAMEWORKS.map(f => '<a class="hero-badge" href="#' + f.id + '" style="background:' + f.color + '22;border-color:' + f.color + '44;color:' + f.color + '">' + f.name + '</a>').join('') +
+        '</div>';
+      el.appendChild(content);
+    }
+    renderHero();
   </script>
 </body>
 </html>
