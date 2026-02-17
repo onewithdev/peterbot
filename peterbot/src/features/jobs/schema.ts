@@ -18,6 +18,7 @@ export const jobs = sqliteTable("jobs", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
+  retryCount: integer("retry_count", { mode: "number" }).notNull().default(0),
 });
 
 export type Job = typeof jobs.$inferSelect;

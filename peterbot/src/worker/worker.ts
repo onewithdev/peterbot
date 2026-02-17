@@ -37,6 +37,7 @@ import {
   markJobCompleted,
   markJobFailed,
   markJobDelivered,
+  incrementJobRetryCount,
 } from "../features/jobs/repository.js";
 import type { Job } from "../features/jobs/schema.js";
 
@@ -122,9 +123,43 @@ export function shouldUseE2B(input: string): boolean {
 }
 
 /**
+ * Telegram message character limit.
+ * Telegram supports messages up to 4096 characters.
+ */
+const TELEGRAM_MESSAGE_LIMIT = 4096;
+
+/**
+ * Maximum number of retries for delivery failures.
+ */
+const MAX_DELIVERY_RETRIES = 3;
+
+/**
+ * Truncate text to fit within Telegram's message limit.
+ *
+ * Reserves space for the header and appends a truncation notice when needed.
+ *
+ * @param text - The text to truncate
+ * @param header - The header text that will be prepended
+ * @returns Truncated text with notice if needed
+ */
+function truncateForTelegram(text: string, header: string): string {
+  const totalLength = header.length + text.length;
+
+  if (totalLength <= TELEGRAM_MESSAGE_LIMIT) {
+    return text;
+  }
+
+  const truncationNotice = "\n\n[Message truncated due to length]";
+  const maxTextLength = TELEGRAM_MESSAGE_LIMIT - header.length - truncationNotice.length;
+
+  return text.slice(0, maxTextLength) + truncationNotice;
+}
+
+/**
  * Deliver a completed job result to the user via Telegram.
  *
  * Sends a success message with the result and marks the job as delivered.
+ * Handles message length limits and delivery errors.
  *
  * @param job - The completed job
  * @param result - The result text to deliver
@@ -135,21 +170,30 @@ async function deliverResult(job: Job, result: string): Promise<void> {
     return;
   }
 
-  try {
-    const bot = new Bot(TELEGRAM_BOT_TOKEN);
-    const shortId = job.id.slice(0, 8);
+  const bot = new Bot(TELEGRAM_BOT_TOKEN);
+  const shortId = job.id.slice(0, 8);
+  const header = `✅ Task complete! [${shortId}]\n\n`;
 
-    await bot.api.sendMessage(
-      job.chatId,
-      `✅ Task complete! [${shortId}]\n\n${result}`,
-      { parse_mode: "Markdown" }
-    );
+  // Truncate result to fit within Telegram's message limit
+  const truncatedResult = truncateForTelegram(result, header);
+
+  try {
+    await bot.api.sendMessage(job.chatId, header + truncatedResult);
 
     await markJobDelivered(job.id);
     console.log(`[Worker] Delivered result for job ${shortId}`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[Worker] Failed to deliver result for job ${job.id.slice(0, 8)}:`, errorMessage);
+    console.error(`[Worker] Failed to deliver result for job ${shortId}:`, errorMessage);
+
+    // Handle delivery failure: schedule retry or mark as failed
+    if (job.retryCount < MAX_DELIVERY_RETRIES) {
+      await incrementJobRetryCount(job.id);
+      console.log(`[Worker] Scheduled retry ${job.retryCount + 1}/${MAX_DELIVERY_RETRIES} for job ${shortId}`);
+    } else {
+      await markJobFailed(job.id, `Delivery failed after ${MAX_DELIVERY_RETRIES} retries: ${errorMessage}`);
+      console.error(`[Worker] Job ${shortId} marked as failed after max delivery retries`);
+    }
   }
 }
 
@@ -164,6 +208,7 @@ async function deliverResult(job: Job, result: string): Promise<void> {
 async function notifyFailure(job: Job, error: string): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN) {
     console.log(`[Worker] No TELEGRAM_BOT_TOKEN, skipping failure notification for job ${job.id.slice(0, 8)}`);
+    await markJobDelivered(job.id);
     return;
   }
 
@@ -176,6 +221,7 @@ async function notifyFailure(job: Job, error: string): Promise<void> {
       `❌ Task failed [${shortId}]\n\nError: ${error}\n\nReply "retry ${shortId}" to try again.`
     );
 
+    await markJobDelivered(job.id);
     console.log(`[Worker] Sent failure notification for job ${shortId}`);
   } catch (notifyError) {
     const errorMessage = notifyError instanceof Error ? notifyError.message : String(notifyError);

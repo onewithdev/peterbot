@@ -54,7 +54,7 @@ async function runTracer(): Promise<void> {
     logSection("CREATE TEST JOB");
     logInfo("Inserting test job into database...");
 
-    const newJob = await createJob({
+    const newJob = await createJob(db, {
       type: "task",
       input: TEST_INPUT,
       chatId: TEST_CHAT_ID,
@@ -71,7 +71,7 @@ async function runTracer(): Promise<void> {
     logSection("READ VERIFICATION");
     logInfo("Querying test job by ID...");
 
-    const fetchedJob = await getJobById(testJobId);
+    const fetchedJob = await getJobById(db, testJobId);
     if (!fetchedJob) {
       throw new Error(`Test job with ID ${testJobId} not found`);
     }
@@ -87,8 +87,8 @@ async function runTracer(): Promise<void> {
 
     // Mark as running
     logInfo("Updating status to 'running'...");
-    await markJobRunning(testJobId);
-    let job = await getJobById(testJobId);
+    await markJobRunning(db, testJobId);
+    let job = await getJobById(db, testJobId);
     if (job?.status !== "running") {
       throw new Error("Failed to update status to 'running'");
     }
@@ -96,8 +96,8 @@ async function runTracer(): Promise<void> {
 
     // Mark as completed
     logInfo("Updating status to 'completed'...");
-    await markJobCompleted(testJobId, "Hello from the tracer!");
-    job = await getJobById(testJobId);
+    await markJobCompleted(db, testJobId, "Hello from the tracer!");
+    job = await getJobById(db, testJobId);
     if (job?.status !== "completed") {
       throw new Error("Failed to update status to 'completed'");
     }
@@ -116,7 +116,7 @@ async function runTracer(): Promise<void> {
     await db.delete(jobs).where(eq(jobs.id, testJobId));
 
     // Verify deletion by ensuring the test id is gone
-    const afterDelete = await getJobById(testJobId);
+    const afterDelete = await getJobById(db, testJobId);
     if (afterDelete) {
       throw new Error("Failed to delete test job - it still exists");
     }

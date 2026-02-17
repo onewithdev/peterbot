@@ -117,3 +117,16 @@ export async function markJobDelivered(
     })
     .where(eq(jobs.id, id));
 }
+
+export async function incrementJobRetryCount(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb,
+  id: string
+): Promise<void> {
+  await db
+    .update(jobs)
+    .set({
+      retryCount: jobs.retryCount + 1,
+      updatedAt: new Date(),
+    })
+    .where(eq(jobs.id, id));
+}
