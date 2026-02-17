@@ -23,6 +23,8 @@
 import { Hono } from "hono";
 import { getBot } from "./telegram/bot.js";
 import { config } from "../shared/config.js";
+import { dashboardApp } from "./dashboard/routes.js";
+import { serveStatic } from "hono/bun";
 
 /**
  * Server port from centralized config.
@@ -45,6 +47,33 @@ let worker: ReturnType<typeof Bun.spawn> | null = null;
  * Hono web application instance.
  */
 const app = new Hono();
+
+/**
+ * Mount dashboard API routes.
+ * All /api/* routes are handled by the dashboard app.
+ */
+app.route("/api", dashboardApp);
+
+/**
+ * Serve React SPA static files in production.
+ *
+ * In production, the frontend is built to web/dist/ and served
+ * by Hono. All non-API routes serve index.html for client-side routing.
+ *
+ * Development uses Vite dev server (port 5173) which proxies /api to port 3000.
+ */
+const isProduction = process.env.NODE_ENV === "production";
+
+if (isProduction) {
+  // Serve static files from web/dist
+  app.use("/*", serveStatic({ root: "./web/dist" }));
+
+  // SPA fallback: serve index.html for any non-API route
+  app.get("*", async (c) => {
+    const indexHtml = await Bun.file("./web/dist/index.html").text();
+    return c.html(indexHtml);
+  });
+}
 
 /**
  * Health check endpoint.

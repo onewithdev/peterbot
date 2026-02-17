@@ -41,6 +41,7 @@ import {
 } from "../features/jobs/repository.js";
 import type { Job } from "../features/jobs/schema.js";
 import { config } from "../shared/config.js";
+import { db } from "../db/index.js";
 
 // Force early validation of required config (throws if missing)
 config.googleApiKey;
@@ -186,7 +187,7 @@ async function deliverResult(job: Job, result: string): Promise<void> {
   try {
     await bot.api.sendMessage(job.chatId, header + truncatedResult);
 
-    await markJobDelivered(job.id);
+    await markJobDelivered(db, job.id);
     console.log(`[Worker] Delivered result for job ${shortId}`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -194,10 +195,10 @@ async function deliverResult(job: Job, result: string): Promise<void> {
 
     // Handle delivery failure: schedule retry or mark as failed
     if (job.retryCount < MAX_DELIVERY_RETRIES) {
-      await incrementJobRetryCount(job.id);
+      await incrementJobRetryCount(db, job.id);
       console.log(`[Worker] Scheduled retry ${job.retryCount + 1}/${MAX_DELIVERY_RETRIES} for job ${shortId}`);
     } else {
-      await markJobFailed(job.id, `Delivery failed after ${MAX_DELIVERY_RETRIES} retries: ${errorMessage}`);
+      await markJobFailed(db, job.id, `Delivery failed after ${MAX_DELIVERY_RETRIES} retries: ${errorMessage}`);
       console.error(`[Worker] Job ${shortId} marked as failed after max delivery retries`);
     }
   }
@@ -214,7 +215,7 @@ async function deliverResult(job: Job, result: string): Promise<void> {
 async function notifyFailure(job: Job, error: string): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN) {
     console.log(`[Worker] No TELEGRAM_BOT_TOKEN, skipping failure notification for job ${job.id.slice(0, 8)}`);
-    await markJobDelivered(job.id);
+    await markJobDelivered(db, job.id);
     return;
   }
 
@@ -227,7 +228,7 @@ async function notifyFailure(job: Job, error: string): Promise<void> {
       `❌ Task failed [${shortId}]\n\nError: ${error}\n\nReply "retry ${shortId}" to try again.`
     );
 
-    await markJobDelivered(job.id);
+    await markJobDelivered(db, job.id);
     console.log(`[Worker] Sent failure notification for job ${shortId}`);
   } catch (notifyError) {
     const errorMessage = notifyError instanceof Error ? notifyError.message : String(notifyError);
@@ -253,7 +254,7 @@ async function processJob(job: Job): Promise<void> {
 
   console.log(`[Worker] Processing job ${shortId}: "${inputPreview}"`);
 
-  await markJobRunning(job.id);
+  await markJobRunning(db, job.id);
 
   try {
     // Determine if this task needs code execution tools
@@ -275,7 +276,7 @@ async function processJob(job: Job): Promise<void> {
     const output = result.text;
 
     // Mark job as completed
-    await markJobCompleted(job.id, output);
+    await markJobCompleted(db, job.id, output);
     console.log(`[Worker] Job ${shortId} completed`);
 
     // Deliver the result
@@ -284,7 +285,7 @@ async function processJob(job: Job): Promise<void> {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     // Mark job as failed
-    await markJobFailed(job.id, errorMessage);
+    await markJobFailed(db, job.id, errorMessage);
     console.error(`[Worker] Job ${shortId} failed:`, errorMessage);
 
     // Notify user of failure
@@ -304,7 +305,7 @@ async function pollLoop(): Promise<void> {
   while (true) {
     try {
       // Fetch pending jobs
-      const jobs = await getPendingJobs();
+      const jobs = await getPendingJobs(db);
 
       if (jobs.length > 0) {
         console.log(`[Worker] Found ${jobs.length} pending job(s)`);

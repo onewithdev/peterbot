@@ -137,4 +137,12 @@ export const config = {
   get model(): string {
     return getOptionalEnv("MODEL", "claude-sonnet-4-5-20250929");
   },
+
+  /**
+   * Dashboard password for web UI authentication.
+   * Required for accessing protected dashboard routes.
+   */
+  get dashboardPassword(): string {
+    return requireEnv("DASHBOARD_PASSWORD");
+  },
 } as const;
