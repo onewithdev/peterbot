@@ -146,6 +146,23 @@
     .fw-card.expanded .fw-connect { display: block; }
     .fw-card.expanded .fw-expand-hint { display: none; }
     .fw-expand-hint { font-size: 0.78rem; color: var(--muted); margin-top: 12px; text-align: center; }
+    #compare-filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px; }
+    .filter-pill {
+      padding: 6px 14px; border-radius: 9999px; cursor: pointer;
+      font-size: 0.82rem; font-weight: 600; border: 1.5px solid var(--border);
+      color: var(--muted); background: var(--surface); transition: all 0.15s;
+    }
+    .filter-pill.active { border-color: #fff; color: #fff; background: var(--border); }
+    .compare-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+    tr:hover td { background: var(--surface); }
+    tr.hidden { display: none; }
+    .cell-yes { color: #4ade80; font-size: 1.1rem; }
+    .cell-no { color: #475569; font-size: 1.1rem; }
+    .fw-name-cell { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .fw-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -444,7 +461,7 @@ const FEATURES = [
     function renderGallery() {
       var grid = document.getElementById('gallery-grid');
       grid.innerHTML = FRAMEWORKS.map(function(fw) {
-        return '<div class="fw-card" id="' + fw.id + '" onclick="this.classList.toggle('expanded')">' +
+        return '<div class="fw-card" id="' + fw.id + '" onclick="this.classList.toggle(\'expanded\')">' +
           '<div class="fw-card-header" style="border-top: 4px solid ' + fw.color + '">' +
           '<span class="fw-name" style="color:' + fw.color + '">' + fw.name + '</span>' +
           '<span class="fw-lang-badge">' + fw.lang + '</span>' +
@@ -464,6 +481,49 @@ const FEATURES = [
       }).join('');
     }
     renderGallery();
+    var activeFilters = new Set();
+
+    function renderCompare() {
+      var filtersEl = document.getElementById('compare-filters');
+      filtersEl.innerHTML = '<span style="font-size:0.85rem;color:var(--muted);align-self:center">Filter by feature:</span>' +
+        FEATURES.map(function(f) {
+          return '<button class="filter-pill" data-key="' + f.key + '" onclick="toggleFilter(\'' + f.key + '\')">' + f.icon + ' ' + f.label + '</button>';
+        }).join('');
+
+      var tableEl = document.getElementById('compare-table');
+      tableEl.innerHTML = '<div class="compare-wrap"><table id="compare-tbl"><thead><tr>' +
+        '<th>Framework</th><th>Language</th><th>RAM</th><th>Channels</th>' +
+        FEATURES.map(function(f) { return '<th title="' + f.label + '">' + f.icon + '</th>'; }).join('') +
+        '</tr></thead><tbody>' +
+        FRAMEWORKS.map(function(fw) {
+          var rowFeatures = FEATURES.filter(function(f) { return fw.features[f.key]; }).map(function(f) { return f.key; }).join(',');
+          var chans = fw.channels.slice(0,3).join(', ') + (fw.channels.length > 3 ? ' +' + (fw.channels.length-3) : '');
+          return '<tr data-id="' + fw.id + '" data-features="' + rowFeatures + '">' +
+            '<td><span class="fw-name-cell"><span class="fw-dot" style="background:' + fw.color + '"></span>' +
+            '<a href="#' + fw.id + '" style="color:' + fw.color + ';text-decoration:none;font-weight:700">' + fw.name + '</a></span></td>' +
+            '<td style="color:var(--muted);font-size:0.85rem">' + fw.lang + '</td>' +
+            '<td style="font-size:0.85rem">' + fw.ram + '</td>' +
+            '<td style="font-size:0.78rem;color:var(--muted)">' + chans + '</td>' +
+            FEATURES.map(function(f) { return '<td class="' + (fw.features[f.key] ? 'cell-yes' : 'cell-no') + '">' + (fw.features[f.key] ? '\u2713' : '\u2014') + '</td>'; }).join('') +
+            '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }
+
+    function toggleFilter(key) {
+      if (activeFilters.has(key)) activeFilters.delete(key);
+      else activeFilters.add(key);
+      document.querySelectorAll('.filter-pill').forEach(function(p) {
+        p.classList.toggle('active', activeFilters.has(p.dataset.key));
+      });
+      document.querySelectorAll('#compare-tbl tbody tr').forEach(function(row) {
+        if (activeFilters.size === 0) { row.classList.remove('hidden'); return; }
+        var rowFeatures = row.dataset.features ? row.dataset.features.split(',') : [];
+        var matches = Array.from(activeFilters).every(function(f) { return rowFeatures.includes(f); });
+        row.classList.toggle('hidden', !matches);
+      });
+    }
+    renderCompare();
   </script>
 </body>
 </html>
