@@ -1,0 +1,30 @@
+{
+  "name": "peterbot",
+  "version": "0.1.0",
+  "description": "Telegram AI agent with tracer bullet methodology",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/core/server.ts",
+    "worker": "bun run src/worker/index.ts",
+    "start": "bun run src/core/server.ts",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "tracer": "bun run scripts/tracer.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.1.0",
+    "@e2b/code-interpreter": "^1.0.5",
+    "ai": "^4.3.0",
+    "drizzle-orm": "^0.38.3",
+    "grammy": "^1.31.0",
+    "hono": "^4.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "better-sqlite3": "^12.6.2",
+    "drizzle-kit": "^0.30.2"
+  }
+}
