@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Claw Family — AI Framework Guide</title>
+  <style>
+    :root {
+      --oc: #2563EB;
+      --zc: #0EA5E9;
+      --nc: #F59E0B;
+      --nb: #EAB308;
+      --pc: #14B8A6;
+      --ic: #EA580C;
+      --tc: #9333EA;
+      --az: #16A34A;
+      --bg: #0F0F13;
+      --surface: #1A1A24;
+      --border: #2A2A3A;
+      --text: #E8E8F0;
+      --muted: #888899;
+      --radius: 12px;
+      --gap: 24px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+    }
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(15,15,19,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 32px;
+      padding: 0 32px; height: 56px;
+    }
+    nav .logo { font-weight: 800; font-size: 1.1rem; letter-spacing: -0.5px; }
+    nav a {
+      color: var(--muted); text-decoration: none;
+      font-size: 0.9rem; transition: color 0.2s;
+    }
+    nav a:hover { color: var(--text); }
+    section { padding: 80px 32px; max-width: 1280px; margin: 0 auto; }
+    h2 { font-size: 2rem; font-weight: 800; margin-bottom: 8px; }
+    .section-sub { color: var(--muted); margin-bottom: 48px; }
+  </style>
+</head>
+<body>
+  <nav>
+    <span class="logo">🦀 The Claw Family</span>
+    <a href="#gallery">Frameworks</a>
+    <a href="#compare">Compare</a>
+    <a href="#builder">Builder</a>
+  </nav>
+  <div id="hero"></div>
+  <section id="gallery">
+    <h2>Frameworks</h2>
+    <p class="section-sub">Click any card to expand details.</p>
+    <div id="gallery-grid"></div>
+  </section>
+  <section id="compare">
+    <h2>Side-by-Side Comparison</h2>
+    <p class="section-sub">Filter by feature to find your match.</p>
+    <div id="compare-filters"></div>
+    <div id="compare-table"></div>
+  </section>
+  <section id="builder">
+    <h2>Blueprint Builder</h2>
+    <p class="section-sub">Pick your requirements. Get a custom framework recommendation + downloadable PRD.</p>
+    <div id="builder-wizard"></div>
+  </section>
+  <script>
+    // Data + logic injected in later tasks
+  </script>
+</body>
+</html>
