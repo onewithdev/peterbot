@@ -208,6 +208,33 @@
     }
     .constraint-group { margin-bottom: 28px; }
     .constraint-label { font-weight: 700; margin-bottom: 12px; font-size: 0.95rem; }
+    .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); margin-bottom: 32px; }
+    @media (max-width: 700px) { .results-grid { grid-template-columns: 1fr; } }
+    .match-card {
+      border-radius: var(--radius); padding: 20px;
+      border: 2px solid var(--border); background: var(--surface);
+    }
+    .match-rank { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .match-score-bar { height: 8px; border-radius: 4px; background: var(--border); margin: 8px 0; }
+    .match-score-fill { height: 100%; border-radius: 4px; }
+    .gap-list { margin-top: 12px; }
+    .gap-item { font-size: 0.82rem; padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+    .gap-yes { color: #4ade80; }
+    .gap-no { color: #f87171; }
+    .config-snippet {
+      background: var(--bg); border-radius: 8px; padding: 16px;
+      font-family: monospace; font-size: 0.82rem; white-space: pre-wrap;
+      border: 1px solid var(--border); overflow-x: auto;
+    }
+    .download-btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 14px 28px; border-radius: 10px;
+      background: linear-gradient(135deg, #7c3aed, #2563eb);
+      color: #fff; font-size: 1rem; font-weight: 700;
+      border: none; cursor: pointer; transition: opacity 0.2s;
+      margin-top: 16px;
+    }
+    .download-btn:hover { opacity: 0.85; }
   </style>
 </head>
 <body>
@@ -646,6 +673,77 @@ const FEATURES = [
       renderBuilder();
     }
     renderBuilder();
+    function scoreFramework(fw) {
+      var total = builderState.features.size || 1;
+      var featureMatches = 0;
+      builderState.features.forEach(function(key) { if (fw.features[key]) featureMatches++; });
+      var score = (featureMatches / total) * 60;
+      if (builderState.lang === 'any' || fw.lang === builderState.lang) score += 20;
+      if (builderState.hardware === 'extreme' && fw.features.lowRAM) score += 20;
+      else if (builderState.hardware === 'edge' && (fw.features.lowRAM || fw.features.fastBoot)) score += 20;
+      else if (builderState.hardware === 'normal') score += 20;
+      if (builderState.security === 'enterprise' && fw.features.wasmSandbox) score += 10;
+      else if (builderState.security === 'production' && (fw.features.container || fw.features.wasmSandbox)) score += 10;
+      else if (builderState.security === 'personal') score += 10;
+      return { fw: fw, score: Math.round(score), featureMatches: featureMatches };
+    }
+
+    function renderResults() {
+      var ranked = FRAMEWORKS.map(scoreFramework).sort(function(a,b) { return b.score - a.score; });
+      var top = ranked[0];
+      var second = ranked[1];
+      var gapRows = FEATURES.filter(function(f) { return builderState.features.has(f.key); }).map(function(f) {
+        return '<div class="gap-item"><span>' + f.icon + ' ' + f.label + '</span>' +
+          '<span class="' + (top.fw.features[f.key]?'gap-yes':'gap-no') + '">' + (top.fw.features[f.key]?'✓ Included':'✗ Missing') + '</span></div>';
+      }).join('') || '<div style="color:var(--muted);font-size:0.85rem">No features selected — showing overall best match.</div>';
+      return '<h3 style="margin-bottom:24px">Your Blueprint</h3>' +
+        '<div class="results-grid">' +
+        '<div class="match-card" style="border-color:' + top.fw.color + '">' +
+        '<div class="match-rank">Best Match</div>' +
+        '<div style="font-size:1.3rem;font-weight:800;color:' + top.fw.color + '">' + top.fw.name + '</div>' +
+        '<div style="font-size:0.85rem;color:var(--muted);margin-top:4px">' + top.fw.tagline + '</div>' +
+        '<div class="match-score-bar"><div class="match-score-fill" style="width:' + top.score + '%;background:' + top.fw.color + '"></div></div>' +
+        '<div style="font-size:0.82rem;color:var(--muted)">' + top.score + '% match</div>' +
+        '<div class="gap-list">' + gapRows + '</div>' +
+        '</div>' +
+        '<div>' +
+        '<div style="margin-bottom:16px"><div style="font-size:0.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Runner-Up</div>' +
+        '<div style="font-weight:700;color:' + second.fw.color + '">' + second.fw.name + '</div>' +
+        '<div class="match-score-bar" style="margin-top:6px"><div class="match-score-fill" style="width:' + second.score + '%;background:' + second.fw.color + '"></div></div>' +
+        '<div style="font-size:0.82rem;color:var(--muted)">' + second.score + '% match</div></div>' +
+        '<div style="font-size:0.85rem;font-weight:700;margin-bottom:8px">Sample Config:</div>' +
+        '<div class="config-snippet">' + top.fw.configExample + '</div>' +
+        '</div></div>' +
+        '<button class="wizard-btn secondary" onclick="goStep(2)">&larr; Adjust Constraints</button>' +
+        '<button class="download-btn" onclick="downloadPRD()">📄 Download My Blueprint PRD</button>';
+    }
+
+    function downloadPRD() {
+      var ranked = FRAMEWORKS.map(scoreFramework).sort(function(a,b) { return b.score - a.score; });
+      var top = ranked[0];
+      var featureList = FEATURES.map(function(f) { return '- [' + (builderState.features.has(f.key)?'x':' ') + '] ' + f.icon + ' ' + f.label; }).join('\n');
+      var gapAnalysis = FEATURES.filter(function(f) { return builderState.features.has(f.key); }).map(function(f) {
+        return '| ' + f.icon + ' ' + f.label + ' | ' + (top.fw.features[f.key]?'✅ Included':'⚠️ Missing') + ' |';
+      }).join('\n') || '| No features selected | — |';
+      var topMatches = ranked.slice(0,3).map(function(r,i) { return (i+1) + '. **' + r.fw.name + '** (' + r.score + '% match) — ' + r.fw.tagline; }).join('\n');
+      var borrowFrom = ranked.filter(function(r) { return r.fw.id !== top.fw.id; }).slice(0,3).filter(function(r) {
+        return FEATURES.some(function(f) { return builderState.features.has(f.key) && r.fw.features[f.key] && !top.fw.features[f.key]; });
+      }).map(function(r) {
+        var missing = FEATURES.filter(function(f) { return builderState.features.has(f.key) && r.fw.features[f.key] && !top.fw.features[f.key]; });
+        return '- **' + r.fw.name + '** (' + r.fw.lang + '): ' + missing.map(function(f) { return f.label; }).join(', ');
+      }).join('\n') || '- No additional borrowing needed — top match covers all features.';
+      var hwMap = { normal: 'Normal laptop/server', edge: 'Edge device (Raspberry Pi)', extreme: 'Extreme edge ($10 board)' };
+      var secMap = { personal: 'Personal use', production: 'Production deployment', enterprise: 'Enterprise / strict sandbox' };
+      var langMap = { any: 'No preference', TypeScript: 'TypeScript', Python: 'Python', Rust: 'Rust', Go: 'Go' };
+      var runnerUpSection = ranked[1].fw.id !== top.fw.id ?
+        '\n### Consider integrating from ' + ranked[1].fw.name + ':\n' + ranked[1].fw.abilities.slice(0,3).map(function(a) { return '- ' + a; }).join('\n') : '';
+      var md = '# My Custom AI Assistant Blueprint\n> Generated by The Claw Family Framework Guide — ' + new Date().toLocaleDateString() + '\n\n---\n\n## My Requirements\n\n### Must-Have Features\n' + featureList + '\n\n### Constraints\n- **Language preference:** ' + langMap[builderState.lang] + '\n- **Hardware target:** ' + hwMap[builderState.hardware] + '\n- **Security needs:** ' + secMap[builderState.security] + '\n\n---\n\n## Recommended Frameworks\n\n' + topMatches + '\n\n---\n\n## Top Match: ' + top.fw.name + '\n\n**Score:** ' + top.score + '% match\n**Language:** ' + top.fw.lang + '\n**RAM:** ' + top.fw.ram + ' | **Startup:** ' + top.fw.startup + '\n**Core philosophy:** ' + top.fw.tagline + '\n\n### What it does for you:\n' + top.fw.special + '\n\n### Feature Gap Analysis\n\n| Feature | Status |\n|---------|--------|\n' + gapAnalysis + '\n\n### How to Get Started\n\n```\n# Get the code\ngit clone ' + top.fw.repoUrl + '\n\n# Configure it\n' + top.fw.configExample + '\n```\n\n---\n\n## Filling the Gaps\n\nIf ' + top.fw.name + ' is missing features you need, consider borrowing patterns from:\n\n' + borrowFrom + '\n\n---\n\n## Recommended Architecture\n\nStart with **' + top.fw.name + '** as your base. It gives you:\n' + top.fw.abilities.map(function(a) { return '- ' + a; }).join('\n') + runnerUpSection + '\n\n---\n\n## Next Steps\n\n1. Clone ' + top.fw.name + ': `git clone ' + top.fw.repoUrl + '`\n2. Run the setup wizard to configure your channels and LLM provider\n3. Review the README and adjust configuration to your needs\n4. Browse **Awesome-OpenClaw** (https://github.com/rohitg00/awesome-openclaw) for community extensions\n\n---\n\n*Generated by [The Claw Family Guide](https://github.com/openclaw/openclaw)*\n';
+      var blob = new Blob([md], { type: 'text/markdown' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'my-ai-framework-blueprint.md'; a.click();
+      URL.revokeObjectURL(url);
+    }
   </script>
 </body>
 </html>
