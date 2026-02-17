@@ -87,6 +87,65 @@
       border: 2px solid transparent;
     }
     .hero-badge:hover { transform: translateY(-2px); opacity: 0.9; }
+    #gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: var(--gap);
+    }
+    .fw-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+    .fw-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+    }
+    .fw-card-header {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .fw-name { font-size: 1.4rem; font-weight: 800; }
+    .fw-lang-badge {
+      padding: 3px 10px; border-radius: 9999px;
+      font-size: 0.75rem; font-weight: 700;
+      background: var(--border); color: var(--muted);
+    }
+    .fw-card-body { padding: 20px 24px; }
+    .fw-tagline { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
+    .fw-diagram { margin: 16px 0; }
+    .fw-special {
+      background: var(--bg); border-radius: 8px;
+      padding: 12px 14px; font-size: 0.85rem;
+      border-left: 3px solid;
+      margin-bottom: 16px;
+    }
+    .fw-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .fw-pill {
+      padding: 4px 12px; border-radius: 9999px;
+      font-size: 0.78rem; font-weight: 600;
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .fw-stats { display: flex; gap: 16px; }
+    .fw-stat { flex: 1; }
+    .fw-stat-label { font-size: 0.72rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .fw-stat-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+    .fw-stat-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+    .fw-connect {
+      margin-top: 16px; padding: 12px 14px;
+      background: var(--bg); border-radius: 8px;
+      font-family: monospace; font-size: 0.78rem;
+      color: var(--muted); white-space: pre-wrap;
+      display: none;
+    }
+    .fw-card.expanded .fw-connect { display: block; }
+    .fw-card.expanded .fw-expand-hint { display: none; }
+    .fw-expand-hint { font-size: 0.78rem; color: var(--muted); margin-top: 12px; text-align: center; }
   </style>
 </head>
 <body>
@@ -362,6 +421,49 @@ const FEATURES = [
       el.appendChild(content);
     }
     renderHero();
+    function makeDiagram(fw) {
+      var c = fw.color;
+      var channels = fw.channels.slice(0, 3).join(' · ') + (fw.channels.length > 3 ? ' +' + (fw.channels.length - 3) : '');
+      return '<svg class="fw-diagram" viewBox="0 0 300 80" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">' +
+        '<rect x="2" y="20" width="72" height="40" rx="6" fill="' + c + '22" stroke="' + c + '" stroke-width="1.5"/>' +
+        '<text x="38" y="37" text-anchor="middle" fill="' + c + '" font-size="9" font-weight="700">CHANNELS</text>' +
+        '<text x="38" y="50" text-anchor="middle" fill="' + c + '99" font-size="7">' + channels + '</text>' +
+        '<line x1="74" y1="40" x2="96" y2="40" stroke="' + c + '" stroke-width="1.5" marker-end="url(#arr-' + fw.id + ')"/>' +
+        '<rect x="98" y="20" width="72" height="40" rx="6" fill="' + c + '22" stroke="' + c + '" stroke-width="1.5"/>' +
+        '<text x="134" y="37" text-anchor="middle" fill="' + c + '" font-size="9" font-weight="700">AGENT</text>' +
+        '<text x="134" y="50" text-anchor="middle" fill="' + c + '99" font-size="7">' + fw.lang + '</text>' +
+        '<line x1="170" y1="40" x2="192" y2="40" stroke="' + c + '" stroke-width="1.5" marker-end="url(#arr-' + fw.id + ')"/>' +
+        '<rect x="194" y="20" width="72" height="40" rx="6" fill="' + c + '22" stroke="' + c + '" stroke-width="1.5"/>' +
+        '<text x="230" y="37" text-anchor="middle" fill="' + c + '" font-size="9" font-weight="700">MEMORY</text>' +
+        '<text x="230" y="50" text-anchor="middle" fill="' + c + '99" font-size="7">+ TOOLS</text>' +
+        '<defs><marker id="arr-' + fw.id + '" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">' +
+        '<path d="M0,0 L0,6 L6,3 z" fill="' + c + '"/></marker></defs>' +
+        '</svg>';
+    }
+
+    function renderGallery() {
+      var grid = document.getElementById('gallery-grid');
+      grid.innerHTML = FRAMEWORKS.map(function(fw) {
+        return '<div class="fw-card" id="' + fw.id + '" onclick="this.classList.toggle('expanded')">' +
+          '<div class="fw-card-header" style="border-top: 4px solid ' + fw.color + '">' +
+          '<span class="fw-name" style="color:' + fw.color + '">' + fw.name + '</span>' +
+          '<span class="fw-lang-badge">' + fw.lang + '</span>' +
+          '</div>' +
+          '<div class="fw-card-body">' +
+          '<p class="fw-tagline">' + fw.tagline + '</p>' +
+          makeDiagram(fw) +
+          '<div class="fw-special" style="border-color:' + fw.color + ';color:var(--text)">\u2728 ' + fw.special + '</div>' +
+          '<div class="fw-pills">' + fw.abilities.map(function(a) { return '<span class="fw-pill" style="border-color:' + fw.color + '44;color:' + fw.color + '">' + a + '</span>'; }).join('') + '</div>' +
+          '<div class="fw-stats">' +
+          '<div class="fw-stat"><div class="fw-stat-label">RAM Usage</div><div class="fw-stat-bar"><div class="fw-stat-fill" style="width:' + (fw.ramScore*10) + '%;background:' + fw.color + '"></div></div><div style="font-size:0.75rem;color:var(--muted);margin-top:3px">' + fw.ram + '</div></div>' +
+          '<div class="fw-stat"><div class="fw-stat-label">Startup Time</div><div class="fw-stat-bar"><div class="fw-stat-fill" style="width:' + (fw.startupScore*10) + '%;background:' + fw.color + '"></div></div><div style="font-size:0.75rem;color:var(--muted);margin-top:3px">' + fw.startup + '</div></div>' +
+          '</div>' +
+          '<div class="fw-connect">\ud83d\udd27 How to connect:\n' + fw.configExample + '</div>' +
+          '<p class="fw-expand-hint">Click to see config \u2193</p>' +
+          '</div></div>';
+      }).join('');
+    }
+    renderGallery();
   </script>
 </body>
 </html>
