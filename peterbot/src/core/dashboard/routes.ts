@@ -44,6 +44,11 @@ import {
   setConfig,
 } from "../../features/compaction/repository.js";
 import {
+  getAllSolutions,
+  deleteSolution,
+  getSolutionById,
+} from "../../features/solutions/repository.js";
+import {
   parseNaturalSchedule,
   calculateNextRun,
 } from "../../features/cron/natural-parser.js";
@@ -69,6 +74,13 @@ const ScheduleIdParamSchema = z.object({
  */
 const ConfigKeyParamSchema = z.object({
   key: z.string().min(1),
+});
+
+/**
+ * Solution ID parameter schema for routes with :id.
+ */
+const SolutionIdParamSchema = z.object({
+  id: z.string().uuid(),
 });
 
 /**
@@ -636,6 +648,50 @@ const app = new Hono()
 
       await setConfig(undefined, key, value);
 
+      return c.json({ success: true });
+    }
+  )
+
+  // ==========================================================================
+  // Solutions API (Protected)
+  // ==========================================================================
+
+  /**
+   * GET /api/solutions
+   * List all solutions.
+   */
+  .get("/solutions", passwordAuth, async (c) => {
+    const solutions = await getAllSolutions(undefined);
+    return c.json({
+      solutions,
+      total: solutions.length,
+    });
+  })
+
+  /**
+   * DELETE /api/solutions/:id
+   * Delete a solution.
+   */
+  .delete(
+    "/solutions/:id",
+    passwordAuth,
+    zValidator("param", SolutionIdParamSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+
+      // Check if solution exists
+      const solution = await getSolutionById(undefined, id);
+      if (!solution) {
+        return c.json(
+          {
+            error: "Not Found",
+            message: `Solution ${id} not found`,
+          },
+          404
+        );
+      }
+
+      await deleteSolution(undefined, id);
       return c.json({ success: true });
     }
   );

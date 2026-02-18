@@ -22,6 +22,10 @@ import { getModel } from "../../ai/client";
 import { config } from "../../shared/config.js";
 import type { Job } from "../../features/jobs/schema";
 import type { Schedule } from "../../features/cron/schema";
+import { findSimilarSolutions } from "../../features/solutions/similarity";
+import { autoTagSolution, buildKeywords } from "../../features/solutions/service";
+import { createSolution, getAllSolutions } from "../../features/solutions/repository";
+import type { Solution } from "../../features/solutions/schema";
 
 /**
  * Format an acknowledgment reply for a newly created task job.
@@ -113,6 +117,76 @@ export function formatSchedulesList(schedules: Schedule[]): string {
     lines.join("\n") +
     `\n\n_Create a new schedule: /schedule_`
   );
+}
+
+// ============================================================================
+// Pending Action State Machine
+// ============================================================================
+
+type PendingAction =
+  | { type: "suggestion"; originalInput: string; solution: Solution }
+  | { type: "save"; jobs: Job[] };
+
+const pendingActions = new Map<string, PendingAction>();
+
+// ============================================================================
+// Solution Format Helpers
+// ============================================================================
+
+function formatSuggestionMessage(solution: Solution): string {
+  const tags = solution.tags ? (JSON.parse(solution.tags) as string[]) : [];
+  const tagStr = tags.length > 0 ? tags.map((t) => `#${t}`).join(" ") : "";
+
+  return (
+    `💡 *Similar solution found!*\n\n` +
+    `*${solution.title}*\n` +
+    (tagStr ? `${tagStr}\n\n` : "\n") +
+    `${solution.description || "No description available."}\n\n` +
+    `Reply *yes* to use this approach, or *no* to proceed normally.`
+  );
+}
+
+function formatSaveList(jobs: Job[]): string {
+  const lines = jobs.map((job, idx) => {
+    const shortId = job.id.slice(0, 8);
+    const input = job.input.length > 40 ? job.input.slice(0, 40) + "..." : job.input;
+    return `${idx + 1}. \`${shortId}\` ${input}`;
+  });
+
+  return (
+    `💾 *Which job to save as a solution?*\n\n` +
+    lines.join("\n") +
+    `\n\nReply with a number (1–3).`
+  );
+}
+
+function formatSolutionSaved(title: string, tags: string[]): string {
+  const tagStr = tags.length > 0 ? tags.map((t) => `#${t}`).join(" ") : "";
+  return (
+    `✅ *Solution saved!*\n\n` +
+    `*${title}*\n` +
+    (tagStr ? `${tagStr}\n\n` : "\n") +
+    `View all solutions: /solutions`
+  );
+}
+
+function formatSolutionsList(solutions: Solution[]): string {
+  if (solutions.length === 0) {
+    return (
+      `📚 *Your solutions*\n\n` +
+      `No solutions yet.\n\n` +
+      `To save a solution, reply to a completed job with:\n` +
+      `"save this solution"`
+    );
+  }
+
+  const lines = solutions.map((s) => {
+    const tags = s.tags ? (JSON.parse(s.tags) as string[]) : [];
+    const tagStr = tags.length > 0 ? tags.map((t) => `#${t}`).join(" ") : "";
+    return `• *${s.title}* ${tagStr}`;
+  });
+
+  return `📚 *Your solutions (${solutions.length}):*\n\n` + lines.join("\n");
 }
 
 /**
@@ -408,6 +482,12 @@ Use /status to see what I'm working on.`,
     await ctx.reply(formatSchedulesList(schedules), { parse_mode: "Markdown" });
   });
 
+  // Command: /solutions
+  bot.command("solutions", async (ctx) => {
+    const solutions = await getAllSolutions(db);
+    await ctx.reply(formatSolutionsList(solutions), { parse_mode: "Markdown" });
+  });
+
   // Main message handler
   bot.on("message:text", async (ctx) => {
     const text = ctx.message.text;
@@ -418,6 +498,133 @@ Use /status to see what I'm working on.`,
       return;
     }
 
+    // Check for pending action
+    const pending = pendingActions.get(chatId);
+
+    if (pending) {
+      if (pending.type === "save") {
+        // Handle save selection
+        const selection = text.trim();
+        if (["1", "2", "3"].includes(selection)) {
+          const index = parseInt(selection, 10) - 1;
+          const job = pending.jobs[index];
+
+          if (job) {
+            try {
+              const tagged = await autoTagSolution(job.input, job.output || "");
+              const keywords = buildKeywords(job.input + " " + (job.output || ""));
+
+              await createSolution(db, {
+                jobId: job.id,
+                title: tagged.title,
+                description: tagged.description,
+                tags: JSON.stringify(tagged.tags),
+                keywords,
+              });
+
+              pendingActions.delete(chatId);
+              await ctx.reply(formatSolutionSaved(tagged.title, tagged.tags), {
+                parse_mode: "Markdown",
+              });
+            } catch (error) {
+              console.error("Error saving solution:", error);
+              pendingActions.delete(chatId);
+              await ctx.reply(
+                "Sorry, I encountered an error while saving the solution. Please try again.",
+                { parse_mode: "Markdown" }
+              );
+            }
+            return;
+          }
+        }
+
+        // Invalid selection, re-send the list
+        await ctx.reply(formatSaveList(pending.jobs), { parse_mode: "Markdown" });
+        return;
+      }
+
+      if (pending.type === "suggestion") {
+        // Handle suggestion response
+        const lowerText = text.toLowerCase().trim();
+        const yesKeywords = ["yes", "use this", "use this approach"];
+        const noKeywords = ["no", "ignore", "skip"];
+
+        if (yesKeywords.some((k) => lowerText.includes(k))) {
+          // User wants to use the suggested approach
+          const solution = pending.solution;
+          const enhancedInput =
+            `[PAST APPROACH]\n` +
+            `Title: ${solution.title}\n` +
+            `${solution.description}\n\n` +
+            pending.originalInput;
+
+          pendingActions.delete(chatId);
+
+          const job = await createJob(db, {
+            type: "task",
+            input: enhancedInput,
+            chatId,
+          });
+
+          await ctx.reply(formatAckReply(job.id), { parse_mode: "Markdown" });
+          return;
+        }
+
+        if (noKeywords.some((k) => lowerText.includes(k))) {
+          // User wants to proceed normally
+          pendingActions.delete(chatId);
+
+          const job = await createJob(db, {
+            type: "task",
+            input: pending.originalInput,
+            chatId,
+          });
+
+          await ctx.reply(formatAckReply(job.id), { parse_mode: "Markdown" });
+          return;
+        }
+
+        // Other message - clear pending and fall through to normal flow
+        pendingActions.delete(chatId);
+        // Continue to normal flow below
+      }
+    }
+
+    // Check for save intent
+    const saveIntentKeywords = ["save this solution", "save solution", "save this"];
+    const lowerText = text.toLowerCase();
+    if (saveIntentKeywords.some((k) => lowerText.includes(k))) {
+      // Get completed jobs for this chat
+      const allJobs = await getJobsByChatId(db, chatId);
+      const completedJobs = allJobs.filter((j) => j.status === "completed").slice(0, 3);
+
+      if (completedJobs.length === 0) {
+        await ctx.reply(
+          "No completed jobs found to save. Complete a job first, then try saving.",
+          { parse_mode: "Markdown" }
+        );
+        return;
+      }
+
+      pendingActions.set(chatId, { type: "save", jobs: completedJobs });
+      await ctx.reply(formatSaveList(completedJobs), { parse_mode: "Markdown" });
+      return;
+    }
+
+    // Check for similar solutions
+    const similarSolutions = await findSimilarSolutions(db, text);
+    if (similarSolutions.length > 0) {
+      const topMatch = similarSolutions[0];
+      pendingActions.set(chatId, {
+        type: "suggestion",
+        originalInput: text,
+        solution: topMatch,
+      });
+      await ctx.reply(formatSuggestionMessage(topMatch), { parse_mode: "Markdown" });
+      return;
+    }
+
+    // Normal flow: intent detection
     const intent = detectIntent(text);
 
     if (intent === "quick") {
