@@ -9,6 +9,9 @@ export * from "../features/cron/schema";
 // Compaction feature
 export * from "../features/compaction/schema";
 
+// Solutions feature
+export * from "../features/solutions/schema";
+
 // Future feature slices (placeholders):
 // export * from "../features/memory/schema";
 // export * from "../features/users/schema";

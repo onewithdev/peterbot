@@ -39,6 +39,11 @@ import {
   getScheduleById,
 } from "../../features/cron/repository.js";
 import {
+  getAllSessions,
+  getConfig,
+  setConfig,
+} from "../../features/compaction/repository.js";
+import {
   parseNaturalSchedule,
   calculateNextRun,
 } from "../../features/cron/natural-parser.js";
@@ -57,6 +62,13 @@ const JobIdParamSchema = z.object({
  */
 const ScheduleIdParamSchema = z.object({
   id: z.string().uuid(),
+});
+
+/**
+ * Config key parameter schema for routes with :key.
+ */
+const ConfigKeyParamSchema = z.object({
+  key: z.string().min(1),
 });
 
 /**
@@ -554,6 +566,76 @@ const app = new Hono()
       }
 
       await toggleSchedule(undefined, id, enabled, nextRunAt);
+      return c.json({ success: true });
+    }
+  )
+
+  // ==========================================================================
+  // Sessions API (Protected)
+  // ==========================================================================
+
+  /**
+   * GET /api/sessions
+   * List all compacted sessions.
+   */
+  .get("/sessions", passwordAuth, async (c) => {
+    const sessions = await getAllSessions(undefined);
+    return c.json({
+      sessions,
+      total: sessions.length,
+    });
+  })
+
+  // ==========================================================================
+  // Config API (Protected)
+  // ==========================================================================
+
+  /**
+   * GET /api/config/:key
+   * Get a config value by key.
+   */
+  .get(
+    "/config/:key",
+    passwordAuth,
+    zValidator("param", ConfigKeyParamSchema),
+    async (c) => {
+      const { key } = c.req.valid("param");
+      const config = await getConfig(undefined, key);
+
+      if (!config) {
+        return c.json(
+          {
+            error: "Not Found",
+            message: `Config ${key} not found`,
+          },
+          404
+        );
+      }
+
+      return c.json({ key: config.key, value: config.value });
+    }
+  )
+
+  /**
+   * PUT /api/config/:key
+   * Set a config value by key.
+   */
+  .put(
+    "/config/:key",
+    passwordAuth,
+    zValidator("param", ConfigKeyParamSchema),
+    zValidator(
+      "json",
+      z.object({
+        value: z.string(),
+      })
+    ),
+    async (c) => {
+      const { key } = c.req.valid("param");
+      const { value } = c.req.valid("json");
+
+      await setConfig(undefined, key, value);
+
       return c.json({ success: true });
     }
   );
