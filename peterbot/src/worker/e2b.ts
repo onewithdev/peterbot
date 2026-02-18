@@ -64,9 +64,12 @@ export async function runInSandbox(code: string): Promise<SandboxResult> {
   let sandbox: Sandbox | undefined;
 
   try {
-    // Create ephemeral sandbox with timeout
+    // Verify API key is configured (throws descriptive error if missing)
     const apiKey = config.e2bApiKey;
-    sandbox = await Sandbox.create(apiKey, {
+
+    // Create ephemeral sandbox with timeout
+    sandbox = await Sandbox.create({
+      apiKey,
       timeoutMs: SANDBOX_TIMEOUT_MS,
     });
 

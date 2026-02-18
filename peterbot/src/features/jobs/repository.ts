@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { db as defaultDb } from "../../db";
 import * as schema from "../../db/schema";
@@ -14,6 +14,7 @@ export async function createJob(
       type: input.type,
       input: input.input,
       chatId: input.chatId,
+      scheduleId: input.scheduleId,
     })
     .returning();
 
@@ -125,7 +126,7 @@ export async function incrementJobRetryCount(
   await db
     .update(jobs)
     .set({
-      retryCount: jobs.retryCount + 1,
+      retryCount: sql`${jobs.retryCount} + 1`,
       updatedAt: new Date(),
     })
     .where(eq(jobs.id, id));

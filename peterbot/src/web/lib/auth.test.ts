@@ -1,21 +1,25 @@
-import { describe, test, expect, beforeEach, vi } from "vitest";
+import { describe, test, expect, beforeEach } from "bun:test";
 
-// Mock localStorage before importing auth module
+// Simple mock for localStorage
 const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
+  store: new Map<string, string>(),
+  getItem(key: string): string | null {
+    return this.store.get(key) ?? null;
+  },
+  setItem(key: string, value: string): void {
+    this.store.set(key, value);
+  },
+  removeItem(key: string): void {
+    this.store.delete(key);
+  },
+  clear(): void {
+    this.store.clear();
+  },
 };
 
-Object.defineProperty(global, "localStorage", {
-  value: localStorageMock,
-  writable: true,
-});
-
-Object.defineProperty(global, "window", {
-  value: { localStorage: localStorageMock },
-  writable: true,
-});
+// Set up global mocks
+global.localStorage = localStorageMock as any;
+global.window = { localStorage: localStorageMock } as any;
 
 // Import after mocking
 import {
@@ -24,25 +28,22 @@ import {
   clearPassword,
   isAuthenticated,
   PASSWORD_KEY,
-} from "./auth";
+} from "../../../web/src/lib/auth";
 
 describe("auth utilities", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    localStorageMock.clear();
   });
 
   describe("getPassword", () => {
     test("returns null when no password is stored", () => {
-      localStorageMock.getItem.mockReturnValue(null);
       const result = getPassword();
-      expect(localStorageMock.getItem).toHaveBeenCalledWith(PASSWORD_KEY);
       expect(result).toBeNull();
     });
 
     test("returns the stored password", () => {
-      localStorageMock.getItem.mockReturnValue("my-secret-password");
+      localStorageMock.setItem(PASSWORD_KEY, "my-secret-password");
       const result = getPassword();
-      expect(localStorageMock.getItem).toHaveBeenCalledWith(PASSWORD_KEY);
       expect(result).toBe("my-secret-password");
     });
   });
@@ -50,29 +51,26 @@ describe("auth utilities", () => {
   describe("setPassword", () => {
     test("stores password in localStorage", () => {
       setPassword("new-password");
-      expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        PASSWORD_KEY,
-        "new-password"
-      );
+      expect(localStorageMock.getItem(PASSWORD_KEY)).toBe("new-password");
     });
   });
 
   describe("clearPassword", () => {
     test("removes password from localStorage", () => {
+      localStorageMock.setItem(PASSWORD_KEY, "some-password");
       clearPassword();
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith(PASSWORD_KEY);
+      expect(localStorageMock.getItem(PASSWORD_KEY)).toBeNull();
     });
   });
 
   describe("isAuthenticated", () => {
     test("returns false when no password is stored", () => {
-      localStorageMock.getItem.mockReturnValue(null);
       const result = isAuthenticated();
       expect(result).toBe(false);
     });
 
     test("returns true when password is stored", () => {
-      localStorageMock.getItem.mockReturnValue("some-password");
+      localStorageMock.setItem(PASSWORD_KEY, "some-password");
       const result = isAuthenticated();
       expect(result).toBe(true);
     });

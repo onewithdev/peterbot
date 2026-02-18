@@ -45,6 +45,12 @@ import type { Job } from "../features/jobs/schema.js";
 import { config } from "../shared/config.js";
 import { db } from "../db/index.js";
 import { readConfigFile } from "../core/dashboard/files.js";
+import { schedulerLoop, getScheduleById } from "./scheduler.js";
+import {
+  getOrCreateChatState,
+  seedDefaultConfig,
+} from "../features/compaction/repository.js";
+import { checkAndCompact } from "../features/compaction/service.js";
 
 // Force early validation of required config (throws if missing)
 config.googleApiKey;
@@ -71,7 +77,7 @@ const TELEGRAM_BOT_TOKEN = config.telegramBotToken;
  *
  * @returns System prompt string for the AI model
  */
-export async function buildSystemPrompt(): Promise<string> {
+export async function buildSystemPrompt(chatId?: string): Promise<string> {
   const today = new Date().toDateString();
 
   // Read configuration files
@@ -90,7 +96,26 @@ export async function buildSystemPrompt(): Promise<string> {
     console.warn("[Worker] Failed to read memory.md:", error instanceof Error ? error.message : String(error));
   }
 
-  const sections: string[] = [
+  const sections: string[] = [];
+
+  // Add conversation history summary if chatId is provided
+  if (chatId) {
+    try {
+      const chatState = await getOrCreateChatState(db, chatId);
+      if (chatState.latestSummary) {
+        sections.push(
+          "=== CONVERSATION HISTORY ===",
+          "",
+          chatState.latestSummary,
+          ""
+        );
+      }
+    } catch (error) {
+      console.warn("[Worker] Failed to load chat state:", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  sections.push(
     "You are peterbot, a helpful AI assistant integrated with Telegram.",
     "",
     "Your capabilities include:",
@@ -102,8 +127,8 @@ export async function buildSystemPrompt(): Promise<string> {
     "- File processing and generation",
     "",
     "When given computational tasks (data analysis, calculations, file creation, etc.),",
-    "use the runCode tool to execute Python code in a secure sandbox environment.",
-  ];
+    "use the runCode tool to execute Python code in a secure sandbox environment."
+  );
 
   // Add soul content if available
   if (soulContent) {
@@ -203,6 +228,7 @@ function truncateForTelegram(text: string, header: string): string {
  *
  * Sends a success message with the result and marks the job as delivered.
  * Handles message length limits and delivery errors.
+ * Prepends schedule label if the job was created by a schedule.
  *
  * @param job - The completed job
  * @param result - The result text to deliver
@@ -215,7 +241,15 @@ async function deliverResult(job: Job, result: string): Promise<void> {
 
   const bot = new Bot(TELEGRAM_BOT_TOKEN);
   const shortId = job.id.slice(0, 8);
-  const header = `✅ Task complete! [${shortId}]\n\n`;
+  let header = `✅ Task complete! [${shortId}]\n\n`;
+
+  // Check if this job was created by a schedule
+  if (job.scheduleId) {
+    const schedule = await getScheduleById(db, job.scheduleId);
+    if (schedule) {
+      header = `📅 Scheduled: "${schedule.description}"\n\n`;
+    }
+  }
 
   // Truncate result to fit within Telegram's message limit
   const truncatedResult = truncateForTelegram(result, header);
@@ -387,7 +421,7 @@ async function processJob(job: Job): Promise<void> {
 
   try {
     // Build system prompt (now async to read config files)
-    const systemPrompt = await buildSystemPrompt();
+    const systemPrompt = await buildSystemPrompt(job.chatId);
 
     // Determine if this task needs code execution tools
     const tools = shouldUseE2B(job.input) ? peterbotTools : undefined;
@@ -410,6 +444,9 @@ async function processJob(job: Job): Promise<void> {
     // Mark job as completed
     await markJobCompleted(db, job.id, output);
     console.log(`[Worker] Job ${shortId} completed`);
+
+    // Check if compaction is needed
+    await checkAndCompact(db, job.chatId, job.id);
 
     // Deliver the result
     await deliverResult(job, output);
@@ -459,6 +496,19 @@ async function pollLoop(): Promise<void> {
 
 // Start the worker if this file is run directly
 if (import.meta.main) {
+  // Seed default compaction config (idempotent)
+  try {
+    await seedDefaultConfig(db);
+  } catch (error) {
+    console.warn("[Worker] Failed to seed default config:", error instanceof Error ? error.message : String(error));
+  }
+
+  // Start the scheduler loop alongside the poll loop
+  schedulerLoop(db, config.telegramChatId).catch((error) => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[Scheduler] Fatal error:", errorMessage);
+  });
+
   pollLoop().catch((error) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("[Worker] Fatal error:", errorMessage);

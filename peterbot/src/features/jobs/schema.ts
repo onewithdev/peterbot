@@ -11,6 +11,7 @@ export const jobs = sqliteTable("jobs", {
   input: text("input").notNull(),
   output: text("output"),
   chatId: text("chat_id").notNull(),
+  scheduleId: text("schedule_id"),
   delivered: integer("delivered", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()

@@ -105,7 +105,7 @@ export async function executeInSession(
 
     if (!session) {
       console.log(`[Console] Creating new session: ${sessionId}`);
-      const sandbox = await Sandbox.create(config.e2bApiKey, {
+      const sandbox = await Sandbox.create({
         timeoutMs: SANDBOX_TIMEOUT_MS,
       });
 
@@ -129,11 +129,16 @@ export async function executeInSession(
     const stdout = execution.logs.stdout.join("\n");
     const stderr = execution.logs.stderr.join("\n");
 
+    // Capture Python errors (NameError, etc.) from execution.error
+    const pythonError = execution.error
+      ? `${execution.error.name}: ${execution.error.value}`
+      : null;
+
     console.log(
-      `[Console] Execution complete. stdout: ${stdout.length} chars, stderr: ${stderr.length} chars`
+      `[Console] Execution complete. stdout: ${stdout.length} chars, stderr: ${stderr.length} chars, error: ${pythonError ?? "none"}`
     );
 
-    return { stdout, stderr, error: null };
+    return { stdout, stderr: stderr || pythonError || "", error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[Console] Execution failed in session ${sessionId}:`, message);

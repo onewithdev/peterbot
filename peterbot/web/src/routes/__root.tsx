@@ -14,6 +14,7 @@ export const Route = createRootRoute<RootContext>({
 
 function RootComponent() {
   const isLoginPage = window.location.pathname === "/login";
+  const isConsolePage = window.location.pathname === "/console";
   const authenticated = isAuthenticated();
 
   // Redirect to login if not authenticated
@@ -26,8 +27,8 @@ function RootComponent() {
     return <Navigate to="/" />;
   }
 
-  // Login page doesn't have sidebar
-  if (isLoginPage) {
+  // Login page and console page don't have sidebar
+  if (isLoginPage || isConsolePage) {
     return (
       <div className="min-h-screen bg-background">
         <Outlet />

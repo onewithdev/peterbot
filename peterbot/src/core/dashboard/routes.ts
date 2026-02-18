@@ -25,19 +25,37 @@ import {
   getConfigFileStats,
   validateBlocklist,
   DEFAULT_CONFIG_CONTENT,
-  type ConfigFileType,
 } from "./files.js";
 import {
   getJobsByChatId,
   getJobById,
   markJobFailed,
 } from "../../features/jobs/repository.js";
+import {
+  getAllSchedules,
+  createSchedule,
+  deleteSchedule,
+  toggleSchedule,
+  getScheduleById,
+} from "../../features/cron/repository.js";
+import {
+  parseNaturalSchedule,
+  calculateNextRun,
+} from "../../features/cron/natural-parser.js";
 import { config } from "../../shared/config.js";
+import { executeInSession, resetSession } from "./console.js";
 
 /**
  * Job ID parameter schema for routes with :id.
  */
 const JobIdParamSchema = z.object({
+  id: z.string().uuid(),
+});
+
+/**
+ * Schedule ID parameter schema for routes with :id.
+ */
+const ScheduleIdParamSchema = z.object({
   id: z.string().uuid(),
 });
 
@@ -83,7 +101,7 @@ const app = new Hono()
    * List all jobs for the configured chat ID.
    */
   .get("/jobs", passwordAuth, async (c) => {
-    const jobs = await getJobsByChatId(config.telegramChatId);
+    const jobs = await getJobsByChatId(undefined, config.telegramChatId);
     return c.json({
       jobs,
       total: jobs.length,
@@ -96,7 +114,7 @@ const app = new Hono()
    */
   .get("/jobs/:id", passwordAuth, zValidator("param", JobIdParamSchema), async (c) => {
     const { id } = c.req.valid("param");
-    const job = await getJobById(id);
+    const job = await getJobById(undefined, id);
 
     if (!job) {
       return c.json(
@@ -121,7 +139,7 @@ const app = new Hono()
     zValidator("param", JobIdParamSchema),
     async (c) => {
       const { id } = c.req.valid("param");
-      const job = await getJobById(id);
+      const job = await getJobById(undefined, id);
 
       if (!job) {
         return c.json(
@@ -144,7 +162,7 @@ const app = new Hono()
         );
       }
 
-      await markJobFailed(id, "Cancelled by user");
+      await markJobFailed(undefined, id, "Cancelled by user");
 
       return c.json({
         success: true,
@@ -334,6 +352,209 @@ const app = new Hono()
         lastModified: stats.lastModified?.toISOString() ?? null,
         size: stats.size,
       });
+    }
+  )
+
+  // ==========================================================================
+  // Console API (Protected)
+  // ==========================================================================
+
+  /**
+   * POST /api/console/execute
+   * Execute Python code in a persistent sandbox session.
+   */
+  .post(
+    "/console/execute",
+    passwordAuth,
+    zValidator(
+      "json",
+      z.object({
+        sessionId: z.string().uuid(),
+        code: z.string().min(1),
+      })
+    ),
+    async (c) => {
+      try {
+        const { sessionId, code } = c.req.valid("json");
+        const result = await executeInSession(sessionId, code);
+        return c.json(result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return c.json({ error: "Internal Server Error", message }, 500);
+      }
+    }
+  )
+
+  /**
+   * POST /api/console/reset
+   * Reset (kill) a persistent sandbox session.
+   */
+  .post(
+    "/console/reset",
+    passwordAuth,
+    zValidator(
+      "json",
+      z.object({
+        sessionId: z.string().uuid(),
+      })
+    ),
+    async (c) => {
+      const { sessionId } = c.req.valid("json");
+      await resetSession(sessionId);
+      return c.json({ success: true });
+    }
+  )
+
+  // ==========================================================================
+  // Schedules API (Protected)
+  // ==========================================================================
+
+  /**
+   * GET /api/schedules
+   * List all schedules.
+   */
+  .get("/schedules", passwordAuth, async (c) => {
+    const schedules = await getAllSchedules(undefined);
+    return c.json({
+      schedules,
+      total: schedules.length,
+    });
+  })
+
+  /**
+   * POST /api/schedules
+   * Create a new schedule from natural language.
+   */
+  .post(
+    "/schedules",
+    passwordAuth,
+    zValidator(
+      "json",
+      z.object({
+        description: z.string(),
+        naturalSchedule: z.string(),
+        prompt: z.string(),
+      })
+    ),
+    async (c) => {
+      const { description, naturalSchedule, prompt } = c.req.valid("json");
+
+      // Parse natural language schedule
+      const parsed = await parseNaturalSchedule(naturalSchedule);
+
+      // Check confidence
+      if (parsed.confidence < 0.5) {
+        return c.json(
+          {
+            error: "Bad Request",
+            message:
+              "Could not parse schedule. Please try a clearer format like:",
+            examples: [
+              "every Monday at 9am",
+              "every weekday at 8:30am",
+              "every day at midnight",
+            ],
+          },
+          400
+        );
+      }
+
+      // Calculate next run time
+      let nextRunAt: Date;
+      try {
+        nextRunAt = calculateNextRun(parsed.cron);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return c.json(
+          {
+            error: "Bad Request",
+            message: `Invalid cron expression: ${message}`,
+          },
+          400
+        );
+      }
+
+      // Create the schedule
+      const schedule = await createSchedule(undefined, {
+        description,
+        naturalSchedule,
+        parsedCron: parsed.cron,
+        prompt,
+        enabled: true,
+        nextRunAt,
+      });
+
+      return c.json({ schedule });
+    }
+  )
+
+  /**
+   * DELETE /api/schedules/:id
+   * Delete a schedule.
+   */
+  .delete(
+    "/schedules/:id",
+    passwordAuth,
+    zValidator("param", ScheduleIdParamSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+
+      // Check if schedule exists
+      const schedule = await getScheduleById(undefined, id);
+      if (!schedule) {
+        return c.json(
+          {
+            error: "Not Found",
+            message: `Schedule ${id} not found`,
+          },
+          404
+        );
+      }
+
+      await deleteSchedule(undefined, id);
+      return c.json({ success: true });
+    }
+  )
+
+  /**
+   * POST /api/schedules/:id/toggle
+   * Enable or disable a schedule.
+   */
+  .post(
+    "/schedules/:id/toggle",
+    passwordAuth,
+    zValidator("param", ScheduleIdParamSchema),
+    zValidator(
+      "json",
+      z.object({
+        enabled: z.boolean(),
+      })
+    ),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { enabled } = c.req.valid("json");
+
+      // Check if schedule exists
+      const schedule = await getScheduleById(undefined, id);
+      if (!schedule) {
+        return c.json(
+          {
+            error: "Not Found",
+            message: `Schedule ${id} not found`,
+          },
+          404
+        );
+      }
+
+      // When enabling, calculate a fresh nextRunAt to avoid replaying stale schedules
+      let nextRunAt: Date | undefined;
+      if (enabled) {
+        const parsedCron = schedule.parsedCron;
+        nextRunAt = calculateNextRun(parsedCron, new Date());
+      }
+
+      await toggleSchedule(undefined, id, enabled, nextRunAt);
+      return c.json({ success: true });
     }
   );
 

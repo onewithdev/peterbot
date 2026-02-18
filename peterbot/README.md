@@ -25,6 +25,23 @@ bun run db:push
 bun run dev
 ```
 
+## Dashboard Access
+
+The web dashboard provides a UI for managing your bot:
+
+- **Production**: `http://localhost:3000` (when running `bun run start`)
+- **Development**: `http://localhost:5173` (when running `bun run web:dev`)
+
+Login with the `DASHBOARD_PASSWORD` from your `.env` file.
+
+**Pages:**
+- **Overview** - System status and recent jobs
+- **Soul** - Edit `soul.md` (AI personality)
+- **Memory** - Edit `memory.md` (system prompt context)
+- **Config** - Manage blocklist patterns
+- **Monitor** - View and manage all jobs
+- **Console** - Execute code in E2B sandbox
+
 ## API Keys Setup
 
 You'll need 4 API keys to run peterbot:
@@ -52,7 +69,36 @@ bun test             # Run test suite
 bun run db:push      # Push schema to database
 bun run db:studio    # Open Drizzle Studio
 bun run tracer       # Run god script to verify database
+bun run web:dev      # Start Vite dev server (port 5173)
+Bun run web:build    # Build frontend for production
+bun run build        # Build frontend for production
 ```
+
+| Command | Description |
+|---------|-------------|
+| `bun run web:dev` | Start Vite dev server (port 5173) |
+| `bun run web:build` | Build frontend for production |
+| `bun run build` | Build frontend for production |
+| `bun run start` | Start production server (serves React SPA) |
+
+## Development Workflow
+
+**Development mode** (two terminals):
+```bash
+# Terminal 1 - Backend API
+bun run dev
+
+# Terminal 2 - Frontend dev server (proxies /api to :3000)
+bun run web:dev
+```
+
+**Production mode** (single command after build):
+```bash
+bun run build      # Build frontend into web/dist/
+bun run start      # Start server with NODE_ENV=production
+```
+
+In development, Vite serves the React app on port 5173 and proxies `/api` requests to the backend on port 3000. In production, the Hono server serves the built React SPA directly from `web/dist/`.
 
 ## Telegram Commands
 
@@ -95,6 +141,7 @@ TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 ANTHROPIC_API_KEY
 E2B_API_KEY
+DASHBOARD_PASSWORD (required - sets login password for web dashboard)
 PORT (optional, defaults to 3000)
 SQLITE_DB_PATH (optional, defaults to ./data/jobs.db)
 ```
@@ -144,13 +191,19 @@ Tests use in-memory SQLite for isolation. See `src/features/jobs/jobs.test.ts` f
 
 Before deploying, verify locally:
 
-- [ ] `.env` created from `.env.example` with all 4 API keys
+- [ ] `.env` created from `.env.example` with all API keys including `DASHBOARD_PASSWORD`
 - [ ] Database initialized: `bun run db:push` creates `data/jobs.db`
 - [ ] God script passes: `bun run tracer` → "🎉 GOD SCRIPT PASSED"
 - [ ] All tests pass: `bun test` → zero failures
-- [ ] Server starts with expected console output
-- [ ] Health check: `http://localhost:3000/health` returns JSON
-- [ ] Dashboard: `http://localhost:3000/` shows HTML page
+- [ ] **Dashboard login**: Visit `http://localhost:3000`, enter password, verify login succeeds
+- [ ] **Dashboard navigation**: Visit each page (Overview, Soul, Memory, Config, Monitor, Console), verify no errors
+- [ ] **Soul editing**: Edit `soul.md`, save, verify success toast appears
+- [ ] **Memory editing**: Edit `memory.md`, save, verify success toast appears
+- [ ] **Config management**: Add a blocklist pattern, verify save succeeds
+- [ ] **Job monitoring**: View jobs on Monitor page, expand a job to see details
+- [ ] **Dev Console**: Execute code in Console page, verify output appears
+- [ ] **Auto-refresh**: Verify Monitor page refreshes automatically (15-second interval)
+- [ ] **Auth protection**: Verify password protection blocks unauthenticated API calls
 - [ ] Telegram `/start` returns welcome message
 - [ ] Quick question answered instantly
 - [ ] Background task creates job ID
@@ -215,6 +268,28 @@ sequenceDiagram
     Bot->>Bot: formatJobsForStatus()
     Bot->>Telegram: Formatted status
     Telegram->>User: Job list with icons
+```
+
+## Deployment Flow
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant Railway
+    participant Nixpacks
+    participant Bun as Bun Runtime
+    participant Hono as Hono Server
+
+    Dev->>Railway: git push
+    Railway->>Nixpacks: Trigger build
+    Nixpacks->>Bun: bun install (root)
+    Nixpacks->>Bun: cd web && bun install
+    Nixpacks->>Bun: bun run build → web/dist/
+    Nixpacks-->>Railway: Build artifact ready
+    Railway->>Bun: bun run start (NODE_ENV=production)
+    Bun->>Hono: Mount /api routes
+    Bun->>Hono: serveStatic({ root: './web/dist' })
+    Hono-->>Railway: Listening on PORT
 ```
 
 ## License

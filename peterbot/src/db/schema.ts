@@ -3,7 +3,12 @@
 // Jobs feature
 export * from "../features/jobs/schema";
 
+// Cron feature
+export * from "../features/cron/schema";
+
+// Compaction feature
+export * from "../features/compaction/schema";
+
 // Future feature slices (placeholders):
 // export * from "../features/memory/schema";
-// export * from "../features/cron/schema";
 // export * from "../features/users/schema";

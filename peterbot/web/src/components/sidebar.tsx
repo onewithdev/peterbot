@@ -4,6 +4,7 @@ import {
   Sparkles,
   Brain,
   Activity,
+  Clock,
   Settings,
   Terminal,
   Bot,
@@ -17,6 +18,7 @@ interface NavItem {
   label: string;
   path: string;
   icon: React.ComponentType<{ className?: string }>;
+  external?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -24,8 +26,9 @@ const navItems: NavItem[] = [
   { label: "Soul", path: "/soul", icon: Sparkles },
   { label: "Memory", path: "/memory", icon: Brain },
   { label: "Monitor", path: "/monitor", icon: Activity },
+  { label: "Schedules", path: "/schedules", icon: Clock },
   { label: "Config", path: "/config", icon: Settings },
-  { label: "Dev Console", path: "/console", icon: Terminal },
+  { label: "Dev Console", path: "/console", icon: Terminal, external: true },
 ];
 
 export function Sidebar() {
@@ -50,6 +53,27 @@ export function Sidebar() {
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
+
+          // External links (Dev Console) open in new tab
+          if (item.external) {
+            return (
+              <a
+                key={item.path}
+                href={item.path}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </a>
+            );
+          }
 
           return (
             <Link

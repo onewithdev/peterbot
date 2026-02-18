@@ -37,6 +37,7 @@ function createTestDb(): BunSQLiteDatabase<typeof schema> {
       input TEXT NOT NULL,
       output TEXT,
       chat_id TEXT NOT NULL,
+      schedule_id TEXT,
       delivered INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
