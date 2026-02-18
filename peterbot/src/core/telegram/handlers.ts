@@ -545,11 +545,11 @@ Use /status to see what I'm working on.`,
 
       if (pending.type === "suggestion") {
         // Handle suggestion response
-        const lowerText = text.toLowerCase().trim();
-        const yesKeywords = ["yes", "use this", "use this approach"];
-        const noKeywords = ["no", "ignore", "skip"];
+        const normalized = text.toLowerCase().trim();
+        const yesKeywords = ["yes", "y", "yeah"];
+        const noKeywords = ["no", "n", "nope"];
 
-        if (yesKeywords.some((k) => lowerText.includes(k))) {
+        if (yesKeywords.includes(normalized)) {
           // User wants to use the suggested approach
           const solution = pending.solution;
           const enhancedInput =
@@ -570,7 +570,7 @@ Use /status to see what I'm working on.`,
           return;
         }
 
-        if (noKeywords.some((k) => lowerText.includes(k))) {
+        if (noKeywords.includes(normalized)) {
           // User wants to proceed normally
           pendingActions.delete(chatId);
 
