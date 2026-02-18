@@ -14,7 +14,8 @@
     "test:watch": "bun test --watch",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "tracer": "bun run scripts/tracer.ts"
+    "tracer": "bun run scripts/tracer.ts",
+    "dev:all": "bun run scripts/dev-all.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.0",
