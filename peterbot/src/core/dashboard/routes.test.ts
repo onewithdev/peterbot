@@ -1,8 +1,41 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach, mock } from "bun:test";
-import { dashboardApp } from "./routes";
 
 // Store original env
 const originalEnv = { ...process.env };
+
+// Mock the jobs repository
+const mockGetJobsByChatId = mock(async () => []);
+const mockGetJobById = mock(async () => undefined);
+const mockMarkJobFailed = mock(async () => {});
+
+mock.module("../../features/jobs/repository", () => ({
+  getJobsByChatId: mockGetJobsByChatId,
+  getJobById: mockGetJobById,
+  markJobFailed: mockMarkJobFailed,
+}));
+
+// Mock the cron repository
+mock.module("../../features/cron/repository", () => ({
+  getAllSchedules: mock(async () => []),
+  createSchedule: mock(async (input: unknown) => ({ id: "sched_123", ...input })),
+  deleteSchedule: mock(async () => {}),
+  toggleSchedule: mock(async () => {}),
+  getScheduleById: mock(async () => undefined),
+}));
+
+// Mock the compaction repository
+mock.module("../../features/compaction/repository", () => ({
+  getAllSessions: mock(async () => []),
+  getConfig: mock(async () => undefined),
+  setConfig: mock(async () => {}),
+}));
+
+// Mock the solutions repository
+mock.module("../../features/solutions/repository", () => ({
+  getAllSolutions: mock(async () => []),
+  deleteSolution: mock(async () => {}),
+  getSolutionById: mock(async () => undefined),
+}));
 
 describe("Dashboard API - Health & Auth", () => {
   beforeAll(() => {
@@ -15,6 +48,8 @@ describe("Dashboard API - Health & Auth", () => {
 
   describe("GET /health", () => {
     test("returns ok status", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/health");
       expect(res.status).toBe(200);
 
@@ -27,6 +62,8 @@ describe("Dashboard API - Health & Auth", () => {
 
   describe("POST /auth/verify", () => {
     test("returns valid: true for correct password", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/auth/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -39,6 +76,8 @@ describe("Dashboard API - Health & Auth", () => {
     });
 
     test("returns valid: false for wrong password", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/auth/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -60,13 +99,40 @@ describe("Dashboard API - Jobs", () => {
     process.env.TELEGRAM_CHAT_ID = "test_chat_123";
   });
 
+  beforeEach(() => {
+    // Reset mocks before each test
+    mockGetJobsByChatId.mockClear();
+    mockGetJobById.mockClear();
+    mockMarkJobFailed.mockClear();
+  });
+
+  afterAll(() => {
+    Object.assign(process.env, originalEnv);
+  });
+
   describe("GET /jobs", () => {
     test("requires password header", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/jobs");
       expect(res.status).toBe(401);
     });
 
     test("returns jobs array with total count", async () => {
+      mockGetJobsByChatId.mockResolvedValue([
+        {
+          id: "550e8400-e29b-41d4-a716-446655440001",
+          type: "task",
+          status: "pending",
+          input: "Test job",
+          chatId: "test_chat_123",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/jobs", {
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
       });
@@ -80,6 +146,10 @@ describe("Dashboard API - Jobs", () => {
 
   describe("GET /jobs/:id", () => {
     test("returns 404 for non-existent job", async () => {
+      mockGetJobById.mockResolvedValue(undefined);
+
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request(
         "/jobs/550e8400-e29b-41d4-a716-446655440000",
         {
@@ -93,6 +163,8 @@ describe("Dashboard API - Jobs", () => {
     });
 
     test("returns 400 for invalid UUID", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/jobs/not-a-uuid", {
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
       });
@@ -103,6 +175,10 @@ describe("Dashboard API - Jobs", () => {
 
   describe("POST /jobs/:id/cancel", () => {
     test("returns 404 for non-existent job", async () => {
+      mockGetJobById.mockResolvedValue(undefined);
+
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request(
         "/jobs/550e8400-e29b-41d4-a716-446655440000/cancel",
         {
@@ -115,6 +191,8 @@ describe("Dashboard API - Jobs", () => {
     });
 
     test("returns 400 for invalid UUID", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/jobs/not-a-uuid/cancel", {
         method: "POST",
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
@@ -142,17 +220,21 @@ describe("Dashboard API - Chat", () => {
   });
 
   afterAll(() => {
-    // Restore the original module
+    Object.assign(process.env, originalEnv);
     mock.restore();
   });
 
   describe("GET /chat/messages", () => {
     test("returns 401 without auth header", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/chat/messages");
       expect(res.status).toBe(401);
     });
 
     test("with valid auth returns messages array", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/chat/messages", {
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
       });
@@ -164,6 +246,8 @@ describe("Dashboard API - Chat", () => {
 
     test("passes since param through", async () => {
       const since = Date.now() - 3600000; // 1 hour ago
+
+      const { dashboardApp } = await import("./routes");
 
       const res = await dashboardApp.request(`/chat/messages?since=${since}`, {
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
@@ -177,6 +261,8 @@ describe("Dashboard API - Chat", () => {
     test("passes before param through", async () => {
       const before = Date.now();
 
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request(`/chat/messages?before=${before}`, {
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
       });
@@ -189,6 +275,8 @@ describe("Dashboard API - Chat", () => {
 
   describe("POST /chat/send", () => {
     test("returns 401 without auth header", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -198,6 +286,8 @@ describe("Dashboard API - Chat", () => {
     });
 
     test("with valid auth returns { messageId, createdAt }", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/chat/send", {
         method: "POST",
         headers: {
@@ -214,6 +304,8 @@ describe("Dashboard API - Chat", () => {
     });
 
     test("with missing content returns 400", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/chat/send", {
         method: "POST",
         headers: {
@@ -227,6 +319,8 @@ describe("Dashboard API - Chat", () => {
     });
 
     test("with empty content returns 400", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/chat/send", {
         method: "POST",
         headers: {
@@ -255,7 +349,7 @@ describe("Dashboard API - Configuration", () => {
   });
 
   afterAll(() => {
-    // Reset test project root
+    Object.assign(process.env, originalEnv);
     _setTestProjectRoot(null);
   });
 
@@ -275,6 +369,8 @@ describe("Dashboard API - Configuration", () => {
 
   describe("GET /soul", () => {
     test("returns empty content when soul.md doesn't exist", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/soul", {
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
       });
@@ -290,6 +386,8 @@ describe("Dashboard API - Configuration", () => {
       const soulContent = "# Peterbot Personality\n\nBe helpful and concise.";
       await writeFile(join(TEST_CONFIG_DIR, "soul.md"), soulContent);
 
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/soul", {
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
       });
@@ -304,6 +402,8 @@ describe("Dashboard API - Configuration", () => {
   describe("PUT /soul", () => {
     test("updates soul.md content", async () => {
       const newContent = "# Updated Personality\n\nBe extra helpful!";
+
+      const { dashboardApp } = await import("./routes");
 
       const res = await dashboardApp.request("/soul", {
         method: "PUT",
@@ -321,6 +421,8 @@ describe("Dashboard API - Configuration", () => {
     });
 
     test("rejects missing content field", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/soul", {
         method: "PUT",
         headers: {
@@ -336,6 +438,8 @@ describe("Dashboard API - Configuration", () => {
 
   describe("GET /memory", () => {
     test("returns empty content when memory.md doesn't exist", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/memory", {
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
       });
@@ -350,6 +454,8 @@ describe("Dashboard API - Configuration", () => {
   describe("PUT /memory", () => {
     test("updates memory.md content", async () => {
       const newContent = "# Memory\n\nUser prefers dark mode.";
+
+      const { dashboardApp } = await import("./routes");
 
       const res = await dashboardApp.request("/memory", {
         method: "PUT",
@@ -368,6 +474,8 @@ describe("Dashboard API - Configuration", () => {
 
   describe("GET /blocklist", () => {
     test("returns default blocklist when file doesn't exist", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/blocklist", {
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
       });
@@ -396,6 +504,8 @@ describe("Dashboard API - Configuration", () => {
       });
       await writeFile(join(TEST_CONFIG_DIR, "config", "blocklist.json"), blocklistContent);
 
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/blocklist", {
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
       });
@@ -422,6 +532,8 @@ describe("Dashboard API - Configuration", () => {
         },
       });
 
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/blocklist", {
         method: "PUT",
         headers: {
@@ -438,6 +550,8 @@ describe("Dashboard API - Configuration", () => {
     });
 
     test("rejects invalid JSON", async () => {
+      const { dashboardApp } = await import("./routes");
+
       const res = await dashboardApp.request("/blocklist", {
         method: "PUT",
         headers: {
@@ -461,6 +575,8 @@ describe("Dashboard API - Configuration", () => {
           message: "Warning!",
         },
       });
+
+      const { dashboardApp } = await import("./routes");
 
       const res = await dashboardApp.request("/blocklist", {
         method: "PUT",
