@@ -4,7 +4,7 @@ export const documentReferences = sqliteTable("document_references", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   source: text("source").notNull(), // URL or "google_drive:<fileId>"
-  type: text("type", { enum: ["web", "doc"] }).notNull().default("web"),
+  type: text("type", { enum: ["web", "doc", "upload"] }).notNull().default("web"),
   summary: text("summary"),
   tags: text("tags"), // JSON array
   content: text("content"),

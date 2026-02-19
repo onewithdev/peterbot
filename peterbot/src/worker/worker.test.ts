@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { buildSystemPrompt, shouldUseE2B, checkBlocklist } from "./worker";
+import { buildSystemPrompt, shouldUseE2B, shouldUseIntegrations, checkBlocklist } from "./worker";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join } from "path";
 
@@ -149,6 +149,73 @@ describe("Worker", () => {
 
     test("handles multiple keywords", () => {
       expect(shouldUseE2B("Download the CSV and analyze the data")).toBe(true);
+    });
+  });
+
+  describe("shouldUseIntegrations()", () => {
+    test("detects email keyword", () => {
+      expect(shouldUseIntegrations("Send an email to John")).toBe(true);
+      expect(shouldUseIntegrations("Check my emails")).toBe(true);
+    });
+
+    test("detects gmail keyword", () => {
+      expect(shouldUseIntegrations("Send via Gmail")).toBe(true);
+      expect(shouldUseIntegrations("Check my Gmail inbox")).toBe(true);
+    });
+
+    test("detects send keyword", () => {
+      expect(shouldUseIntegrations("Send a message")).toBe(true);
+      expect(shouldUseIntegrations("Send the report")).toBe(true);
+    });
+
+    test("detects github keyword", () => {
+      expect(shouldUseIntegrations("Create a GitHub issue")).toBe(true);
+      expect(shouldUseIntegrations("Check my GitHub repos")).toBe(true);
+    });
+
+    test("detects calendar keyword", () => {
+      expect(shouldUseIntegrations("Add to my calendar")).toBe(true);
+      expect(shouldUseIntegrations("Check Google Calendar")).toBe(true);
+    });
+
+    test("detects drive keyword", () => {
+      expect(shouldUseIntegrations("Upload to Drive")).toBe(true);
+      expect(shouldUseIntegrations("Get file from Google Drive")).toBe(true);
+    });
+
+    test("detects notion keyword", () => {
+      expect(shouldUseIntegrations("Create a Notion page")).toBe(true);
+    });
+
+    test("detects linear keyword", () => {
+      expect(shouldUseIntegrations("Create Linear issue")).toBe(true);
+    });
+
+    test("detects issue keyword", () => {
+      expect(shouldUseIntegrations("File an issue")).toBe(true);
+    });
+
+    test("detects event keyword", () => {
+      expect(shouldUseIntegrations("Create calendar event")).toBe(true);
+    });
+
+    test("detects file keyword", () => {
+      expect(shouldUseIntegrations("Upload a file")).toBe(true);
+      expect(shouldUseIntegrations("Download the file")).toBe(true);
+    });
+
+    test("returns false for text-only tasks", () => {
+      expect(shouldUseIntegrations("Explain quantum physics")).toBe(false);
+      expect(shouldUseIntegrations("Summarize this article")).toBe(false);
+    });
+
+    test("is case-insensitive", () => {
+      expect(shouldUseIntegrations("Send EMAIL via GMAIL")).toBe(true);
+      expect(shouldUseIntegrations("CREATE GitHub ISSUE")).toBe(true);
+    });
+
+    test("handles empty string", () => {
+      expect(shouldUseIntegrations("")).toBe(false);
     });
   });
 

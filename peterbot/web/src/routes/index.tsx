@@ -37,8 +37,13 @@ function OverviewPage() {
   // Get recent jobs (last 5)
   const recentJobs = jobs.slice(0, 5)
 
-  const handleStatClick = (tab: string) => {
-    navigate({ to: "/monitor", search: { tab } })
+  const handleStatClick = (type: string) => {
+    // Navigate based on job status type
+    if (type === 'active' || type === 'pending') {
+      navigate({ to: "/jobs" })
+    } else if (type === 'completed' || type === 'failed') {
+      navigate({ to: "/jobs/history" })
+    }
   }
 
   return (
@@ -138,19 +143,16 @@ function OverviewPage() {
           ) : (
             <div className="space-y-3">
               {recentJobs.map((job: ApiJob) => {
-                // Map job status to monitor tab
-                const tabMap: Record<string, string> = {
-                  running: 'active',
-                  pending: 'pending',
-                  completed: 'completed',
-                  failed: 'failed',
-                }
-                const tab = tabMap[job.status] || 'active'
+                // Navigate to correct tab based on job status
+                const isActiveJob = job.status === 'running' || job.status === 'pending'
                 return (
                   <JobCard 
                     key={job.id} 
                     job={job}
-                    onExpand={() => navigate({ to: "/monitor", search: { expand: job.id, tab } })}
+                    onExpand={() => navigate({ 
+                      to: isActiveJob ? "/jobs" : "/jobs/history", 
+                      search: { expand: job.id } 
+                    })}
                   />
                 )
               })}

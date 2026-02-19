@@ -29,7 +29,7 @@ const TOOLKIT_TO_PROVIDER: Record<string, string> = {
   gmail: "gmail",
   googledocs: "googledocs",
   googlesheets: "googlesheets",
-  google_drive: "google_drive",
+  googledrive: "google_drive",
   googlecalendar: "googlecalendar",
   github: "github",
   notion: "notion",
@@ -98,9 +98,8 @@ export async function syncFromComposio(
   }
 
   try {
-    // Fetch all connected accounts for this user
+    // Fetch all connected accounts (entityId may be undefined in Composio)
     const accounts = await client.connectedAccounts.list({
-      userIds: ["peterbot-user"],
       statuses: ["ACTIVE"],
     });
 

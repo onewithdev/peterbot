@@ -27,3 +27,7 @@ mastra agents
 approvals or human in the loop section
 
 integrations instead of env
+petabot opinionated - composio, google telegram
+
+auto complete (slash commands)
+chat should auto scroll down

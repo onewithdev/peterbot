@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Peterbot — Commands & Skills Explorer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3352;
+    --accent: #5b7cf6;
+    --accent2: #7c5bf6;
+    --green: #3ecf8e;
+    --yellow: #f6c45b;
+    --red: #f65b5b;
+    --text: #e2e8f0;
+    --text2: #8892b0;
+    --text3: #4a5568;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+
+  /* Header */
+  .header {
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .header h1 { font-size: 18px; font-weight: 600; }
+  .header .sub { font-size: 13px; color: var(--text2); margin-left: auto; }
+  .badge {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--text2);
+  }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    grid-template-rows: 1fr auto;
+    height: calc(100vh - 65px);
+  }
+
+  /* Left panel */
+  .left-panel {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+
+  /* Right panel */
+  .right-panel {
+    overflow-y: auto;
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+
+  /* Prompt bar */
+  .prompt-bar {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    padding: 16px 24px;
+    background: var(--surface);
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+
+  /* Section headers */
+  .section-label {
+    font-size: 11px; font-weight: 600; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  /* Message input */
+  .message-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .message-box textarea {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 14px 16px;
+    resize: none;
+    outline: none;
+    font-family: inherit;
+    min-height: 80px;
+  }
+  .message-box textarea::placeholder { color: var(--text3); }
+  .message-hint {
+    padding: 8px 16px 12px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .hint-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .hint-chip:hover {
+    background: var(--border); color: var(--text);
+  }
+  .hint-chip.slash { color: var(--accent); border-color: var(--accent); }
+
+  /* Result display */
+  .result-box {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 16px;
+    border: 2px solid var(--border);
+    transition: border-color 0.2s;
+    min-height: 80px;
+  }
+  .result-box.match-chat { border-color: var(--text3); }
+  .result-box.match-skill { border-color: var(--green); }
+  .result-box.match-command { border-color: var(--accent); }
+  .result-box.match-unknown { border-color: var(--yellow); }
+
+  .result-type {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.1em; margin-bottom: 8px;
+  }
+  .result-type.chat { color: var(--text2); }
+  .result-type.skill { color: var(--green); }
+  .result-type.command { color: var(--accent); }
+  .result-type.unknown { color: var(--yellow); }
+
+  .result-name {
+    font-size: 18px; font-weight: 600; margin-bottom: 6px;
+  }
+  .result-desc {
+    font-size: 13px; color: var(--text2); line-height: 1.5;
+  }
+  .result-pattern {
+    margin-top: 10px;
+    background: var(--surface2);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text2);
+    word-break: break-all;
+  }
+  .result-pattern .matched { color: var(--green); font-weight: 600; }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 4px 0 8px;
+  }
+  .flow-step {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    text-align: center;
+    flex: 1;
+  }
+  .flow-step.active { border-color: var(--accent); background: rgba(91,124,246,0.1); }
+  .flow-step.green { border-color: var(--green); background: rgba(62,207,142,0.1); }
+  .flow-arrow {
+    width: 24px; text-align: center;
+    color: var(--text3); font-size: 14px; flex-shrink: 0;
+  }
+
+  /* Command list */
+  .cmd-list { display: flex; flex-direction: column; gap: 4px; }
+  .cmd-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .cmd-item:hover { border-color: var(--accent); background: rgba(91,124,246,0.05); }
+  .cmd-item.active { border-color: var(--accent); background: rgba(91,124,246,0.1); }
+  .cmd-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .cmd-desc { font-size: 12px; color: var(--text2); line-height: 1.4; }
+
+  /* Skill list */
+  .skill-list { display: flex; flex-direction: column; gap: 6px; }
+  .skill-item {
+    padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .skill-item:hover { border-color: var(--green); }
+  .skill-item.active { border-color: var(--green); background: rgba(62,207,142,0.05); }
+  .skill-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .skill-name { font-size: 14px; font-weight: 600; color: var(--green); }
+  .skill-cat {
+    font-size: 10px; color: var(--text3); background: var(--surface2);
+    border-radius: 4px; padding: 1px 6px; text-transform: uppercase;
+  }
+  .skill-trigger {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    background: var(--surface2);
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin-top: 6px;
+    word-break: break-all;
+    line-height: 1.4;
+  }
+  .skill-desc { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  /* Anatomy section */
+  .anatomy {
+    background: var(--surface2);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .anatomy-header {
+    padding: 10px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px; color: var(--text2);
+    font-family: var(--mono);
+  }
+  .anatomy pre {
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+    color: var(--text2);
+  }
+  .anatomy .hl-key { color: #7dd3fc; }
+  .anatomy .hl-val { color: #86efac; }
+  .anatomy .hl-comment { color: var(--text3); font-style: italic; }
+  .anatomy .hl-section { color: #f0abfc; }
+  .anatomy .hl-meta { color: var(--border); }
+
+  /* Prompt output */
+  .prompt-output {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 48px;
+  }
+  .copy-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { background: #4a6ef5; }
+  .copy-btn.copied { background: var(--green); }
+
+  /* Presets */
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; }
+  .preset-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--text); }
+
+  /* Info note */
+  .info-note {
+    background: rgba(246,196,91,0.08);
+    border: 1px solid rgba(246,196,91,0.3);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--yellow);
+    line-height: 1.5;
+  }
+  .info-note strong { color: #fbbf24; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 2px; margin-bottom: 12px; }
+  .tab {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text2);
+    transition: all 0.15s;
+  }
+  .tab.active { background: var(--surface2); color: var(--text); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* Hidden */
+  .hidden { display: none !important; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="font-size:22px">🤖</div>
+  <h1>Peterbot Command & Skills Explorer</h1>
+  <span class="badge">Interactive Playground</span>
+  <span class="sub">Type a message → see what happens</span>
+</div>
+
+<div class="layout">
+
+  <!-- LEFT PANEL: Simulator -->
+  <div class="left-panel">
+
+    <!-- Message input -->
+    <div>
+      <div class="section-label">Simulate a message</div>
+      <div class="message-box">
+        <textarea id="msgInput" placeholder="Type anything you'd send to peterbot..." rows="3" oninput="analyze()"></textarea>
+        <div class="message-hint" id="chips"></div>
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div>
+      <div class="section-label">What happens</div>
+      <div class="result-box" id="resultBox">
+        <div class="result-type chat" id="resultType">Waiting for input...</div>
+        <div class="result-name" id="resultName"></div>
+        <div class="result-desc" id="resultDesc"></div>
+        <div class="result-pattern hidden" id="resultPattern"></div>
+      </div>
+    </div>
+
+    <!-- Flow visualization -->
+    <div>
+      <div class="section-label">Processing flow</div>
+      <div class="flow">
+        <div class="flow-step" id="flowMsg">Your message</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" id="flowCheck">Router</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" id="flowResult">Response</div>
+      </div>
+      <div style="font-size:11px; color:var(--text3); margin-top:8px; line-height:1.5;" id="flowDesc">
+        Start typing above to see the routing decision.
+      </div>
+    </div>
+
+    <!-- Info note about /skills -->
+    <div class="info-note">
+      <strong>Why isn't /skills showing up?</strong><br>
+      Telegram only shows slash command autocomplete if the bot is registered via BotFather's <code>/setcommands</code>. The command still works — you just need to type it in full: <strong>/skills</strong>
+    </div>
+
+    <!-- Presets -->
+    <div>
+      <div class="section-label">Example messages</div>
+      <div class="presets" id="presets"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL: Reference -->
+  <div class="right-panel">
+
+    <!-- Tabs -->
+    <div>
+      <div class="tabs">
+        <div class="tab active" onclick="showTab('commands')">Slash Commands</div>
+        <div class="tab" onclick="showTab('skills')">Skills</div>
+        <div class="tab" onclick="showTab('anatomy')">Skill File Format</div>
+      </div>
+
+      <!-- Commands tab -->
+      <div id="tab-commands">
+        <div class="section-label">Built-in commands — type these exactly</div>
+        <div class="cmd-list" id="cmdList"></div>
+      </div>
+
+      <!-- Skills tab -->
+      <div id="tab-skills" class="hidden">
+        <div class="section-label">Active skills — triggered by message text patterns</div>
+        <div class="skill-list" id="skillList"></div>
+      </div>
+
+      <!-- Anatomy tab -->
+      <div id="tab-anatomy" class="hidden">
+        <div class="section-label" style="margin-bottom:12px">How to write a skill file</div>
+        <p style="font-size:13px; color:var(--text2); line-height:1.6; margin-bottom:16px">
+          Drop a <code style="color:var(--accent)">.skill.md</code> file in the <code style="color:var(--accent)">skills/</code> folder. It gets auto-loaded within 5 seconds.
+        </p>
+        <div class="anatomy">
+          <div class="anatomy-header">skills/my-skill.skill.md</div>
+          <pre><span class="hl-meta">---</span>
+<span class="hl-key">name</span>: <span class="hl-val">my-skill</span>          <span class="hl-comment">← unique identifier</span>
+<span class="hl-key">description</span>: <span class="hl-val">Short description of what this skill does</span>
+<span class="hl-key">triggerPattern</span>: <span class="hl-val">"brainstorm|let's design|help me design"</span>
+<span class="hl-comment">  ↑ regex pattern, matched case-insensitively against every message</span>
+<span class="hl-key">category</span>: <span class="hl-val">planning</span>    <span class="hl-comment">← any label you like</span>
+<span class="hl-key">systemPrompt</span>: <span class="hl-val">|</span>
+  <span class="hl-val">You are a brainstorming assistant.</span>
+  <span class="hl-val">Ask one question at a time. Explore alternatives.</span>
+  <span class="hl-comment">  ↑ injected as extra system context when skill is active</span>
+<span class="hl-meta">---</span>
+
+<span class="hl-section"># Skill Title</span>
+
+Regular markdown here — shown in the dashboard.
+This content is not injected into the AI, only the systemPrompt is.
+
+<span class="hl-section">## Usage Examples</span>
+
+- "brainstorm a new feature"
+- "let's design the auth flow"</pre>
+        </div>
+
+        <div style="margin-top:16px; display:flex; flex-direction:column; gap:10px;">
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px;">
+            <div style="font-size:13px; font-weight:600; margin-bottom:6px;">Pattern tips</div>
+            <div style="font-size:12px; color:var(--text2); line-height:1.7;">
+              <code style="color:var(--accent)">^/brainstorm</code> — starts with /brainstorm<br>
+              <code style="color:var(--accent)">brainstorm|ideate</code> — either word anywhere<br>
+              <code style="color:var(--accent)">\bplan\b</code> — whole word "plan"<br>
+              <code style="color:var(--accent)">let's\s+design</code> — phrase with any whitespace<br>
+              <code style="color:var(--accent)">^/(plan|write-plan)</code> — slash command variants<br>
+            </div>
+          </div>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px;">
+            <div style="font-size:13px; font-weight:600; margin-bottom:6px;">Required fields</div>
+            <div style="font-size:12px; color:var(--text2); line-height:1.7;">
+              <code style="color:var(--green)">name</code> — unique skill identifier<br>
+              <code style="color:var(--green)">triggerPattern</code> — regex string<br>
+              <code style="color:var(--green)">systemPrompt</code> — the injected system context<br>
+            </div>
+          </div>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px;">
+            <div style="font-size:13px; font-weight:600; margin-bottom:6px;">Optional fields</div>
+            <div style="font-size:12px; color:var(--text2); line-height:1.7;">
+              <code style="color:var(--yellow)">description</code> — shown in /skills output<br>
+              <code style="color:var(--yellow)">category</code> — grouping label<br>
+              <code style="color:var(--yellow)">tools</code> — JSON array of extra tools<br>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROMPT BAR -->
+  <div class="prompt-bar">
+    <div class="prompt-output" id="promptOutput">Type a message above to generate a summary prompt.</div>
+    <button class="copy-btn" onclick="copyPrompt()">Copy</button>
+  </div>
+
+</div>
+
+<script>
+// === DATA ===
+
+const SLASH_COMMANDS = [
+  { cmd: "/start",      desc: "Initialize the bot and get a welcome message" },
+  { cmd: "/help",       desc: "Show all available commands and usage tips" },
+  { cmd: "/status",     desc: "Check peterbot's current status and configuration" },
+  { cmd: "/skills",     desc: "List all active skills with their trigger phrases" },
+  { cmd: "/whatcanido", desc: "Full capabilities summary — skills, connected apps, recent changes" },
+  { cmd: "/changelog",  desc: "Show recent changes and updates" },
+  { cmd: "/get",        desc: "Retrieve a saved document: /get <name>" },
+  { cmd: "/schedule",   desc: "Set up a recurring task: /schedule daily 9am <task>" },
+  { cmd: "/schedules",  desc: "List all active schedules" },
+  { cmd: "/solutions",  desc: "List saved solution snippets" },
+  { cmd: "/retry",      desc: "Retry the last failed job" },
+];
+
+const SKILLS = [
+  {
+    name: "brainstorming",
+    description: "Use this before any creative work — creating features, building components, or modifying behavior",
+    triggerPattern: `^/(brainstorm|design|plan)|\\bbrainstorm\\b|let's design|help me design`,
+    category: "planning",
+    examples: ["brainstorm a new feature", "let's design the auth flow", "/brainstorm", "help me design something"],
+  },
+  {
+    name: "writing-plans",
+    description: "Use when you have a spec or requirements for a multi-step task, before touching code",
+    triggerPattern: `^/(plan|write-plan)|write.*plan|create.*implementation.*plan|make a plan`,
+    category: "planning",
+    examples: ["/plan", "write a plan for this", "create an implementation plan", "make a plan for the API"],
+  },
+];
+
+const PRESETS = [
+  { label: "/skills", text: "/skills", type: "command" },
+  { label: "/help", text: "/help", type: "command" },
+  { label: "/whatcanido", text: "/whatcanido", type: "command" },
+  { label: "brainstorm", text: "let's brainstorm a new feature", type: "skill" },
+  { label: "design flow", text: "help me design the login flow", type: "skill" },
+  { label: "make a plan", text: "make a plan for this", type: "skill" },
+  { label: "/plan", text: "/plan", type: "skill" },
+  { label: "regular chat", text: "what's the weather like?", type: "chat" },
+  { label: "unknown cmd", text: "/foo", type: "unknown" },
+];
+
+// === STATE ===
+const state = {
+  message: "",
+  result: null,
+  activeTab: "commands",
+};
+
+// === ANALYZE ===
+function analyze() {
+  const text = document.getElementById("msgInput").value;
+  state.message = text;
+
+  const box = document.getElementById("resultBox");
+  const type = document.getElementById("resultType");
+  const name = document.getElementById("resultName");
+  const desc = document.getElementById("resultDesc");
+  const pattern = document.getElementById("resultPattern");
+
+  // Reset classes
+  box.className = "result-box";
+  pattern.className = "result-pattern hidden";
+
+  if (!text.trim()) {
+    type.className = "result-type chat";
+    type.textContent = "Waiting for input...";
+    name.textContent = "";
+    desc.textContent = "";
+    setFlow("idle");
+    updatePrompt();
+    return;
+  }
+
+  // Check slash commands
+  if (text.startsWith("/")) {
+    const cmdName = text.split(" ")[0].toLowerCase();
+    const known = SLASH_COMMANDS.find(c => c.cmd.toLowerCase() === cmdName);
+
+    if (known) {
+      box.classList.add("match-command");
+      type.className = "result-type command";
+      type.textContent = "⚡ Slash Command";
+      name.textContent = known.cmd;
+      desc.textContent = known.desc;
+      pattern.classList.remove("hidden");
+      pattern.innerHTML = `<span style="color:var(--accent)">Exact match on command:</span> ${known.cmd}`;
+      setFlow("command", known.cmd);
+      state.result = { kind: "command", item: known };
+    } else {
+      box.classList.add("match-unknown");
+      type.className = "result-type unknown";
+      type.textContent = "⚠ Unknown Command";
+      name.textContent = cmdName;
+      desc.textContent = `"${cmdName}" is not a registered command. Messages starting with / that don't match any command are silently ignored by peterbot.`;
+      pattern.classList.remove("hidden");
+      pattern.innerHTML = `<span style="color:var(--yellow)">No matching command found.</span> Known commands: ${SLASH_COMMANDS.map(c => c.cmd).join(", ")}`;
+      setFlow("unknown");
+      state.result = { kind: "unknown", item: { cmd: cmdName } };
+    }
+    updatePrompt();
+    return;
+  }
+
+  // Check skill trigger patterns
+  for (const skill of SKILLS) {
+    try {
+      const regex = new RegExp(skill.triggerPattern, "i");
+      if (regex.test(text)) {
+        box.classList.add("match-skill");
+        type.className = "result-type skill";
+        type.textContent = "✦ Skill Activated";
+        name.textContent = skill.name;
+        desc.textContent = skill.description;
+        pattern.classList.remove("hidden");
+        pattern.innerHTML = `<span style="color:var(--text2)">Matched by pattern:</span> <span class="matched">${escapeHtml(skill.triggerPattern)}</span>`;
+        setFlow("skill", skill.name);
+        state.result = { kind: "skill", item: skill };
+        updatePrompt();
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // Regular chat
+  box.classList.add("match-chat");
+  type.className = "result-type chat";
+  type.textContent = "💬 Regular Chat";
+  name.textContent = "AI conversation";
+  desc.textContent = "No skill pattern matched. Your message goes directly to peterbot's AI with no special context injected. It responds as its normal self.";
+  pattern.classList.remove("hidden");
+  pattern.innerHTML = `<span style="color:var(--text3)">No skill pattern matched.</span> Checked ${SKILLS.length} skill${SKILLS.length !== 1 ? 's' : ''}: ${SKILLS.map(s => s.name).join(", ")}`;
+  setFlow("chat");
+  state.result = { kind: "chat" };
+  updatePrompt();
+}
+
+// === FLOW ===
+function setFlow(mode, label) {
+  const fMsg = document.getElementById("flowMsg");
+  const fCheck = document.getElementById("flowCheck");
+  const fResult = document.getElementById("flowResult");
+  const fDesc = document.getElementById("flowDesc");
+
+  fMsg.className = "flow-step";
+  fCheck.className = "flow-step";
+  fResult.className = "flow-step";
+
+  const descs = {
+    idle: "Start typing above to see the routing decision.",
+    command: `Message starts with <code>/</code> → checked against registered slash commands → <strong>${label}</strong> handler fires directly (no AI involved).`,
+    skill: `Text matched skill pattern → AI is called with the <strong>${label}</strong> skill's system prompt injected alongside peterbot's regular soul.`,
+    chat: "No slash command, no skill pattern matched → AI is called with just peterbot's regular soul and memory. Pure conversation.",
+    unknown: "Message starts with <code>/</code> but no matching command found → <strong>silently ignored</strong> by Telegram's grammY middleware.",
+  };
+
+  if (mode === "idle") {
+    fDesc.innerHTML = descs.idle;
+    return;
+  }
+
+  fMsg.classList.add("active");
+  fCheck.classList.add("active");
+
+  if (mode === "command") {
+    fMsg.textContent = "Slash command";
+    fCheck.textContent = "Command router";
+    fResult.textContent = label + " handler";
+    fResult.classList.add("active");
+    fDesc.innerHTML = descs.command;
+  } else if (mode === "skill") {
+    fMsg.textContent = "Your message";
+    fCheck.textContent = "Pattern matcher";
+    fResult.textContent = label + " skill";
+    fResult.classList.add("green");
+    fDesc.innerHTML = descs.skill;
+  } else if (mode === "chat") {
+    fMsg.textContent = "Your message";
+    fCheck.textContent = "Pattern matcher";
+    fResult.textContent = "AI chat";
+    fDesc.innerHTML = descs.chat;
+  } else if (mode === "unknown") {
+    fMsg.textContent = "Unknown /cmd";
+    fCheck.textContent = "Command router";
+    fResult.textContent = "Ignored ✕";
+    fDesc.innerHTML = descs.unknown;
+  }
+}
+
+// === PROMPT ===
+function updatePrompt() {
+  const out = document.getElementById("promptOutput");
+  const msg = state.message.trim();
+  const r = state.result;
+
+  if (!msg) {
+    out.textContent = "Type a message above to generate a summary prompt.";
+    return;
+  }
+
+  if (!r) {
+    out.textContent = "Type a message above to generate a summary prompt.";
+    return;
+  }
+
+  if (r.kind === "command") {
+    out.textContent = `"${msg}" is a built-in slash command. It's handled directly by the bot — no AI is involved. It will ${r.item.desc.toLowerCase()}`;
+  } else if (r.kind === "skill") {
+    out.textContent = `"${msg}" triggers the "${r.item.name}" skill via pattern matching. When this skill is active, peterbot injects an extra system prompt that makes it behave as a specialized ${r.item.name} assistant. The skill matches because the message fits the pattern: ${r.item.triggerPattern}`;
+  } else if (r.kind === "chat") {
+    out.textContent = `"${msg}" is treated as a regular chat message. No skills matched (checked: ${SKILLS.map(s => s.name).join(', ')}), so peterbot responds as its normal self using its soul and memory for context.`;
+  } else if (r.kind === "unknown") {
+    out.textContent = `"${msg}" starts with a slash but "${r.item.cmd}" is not a registered command. In Telegram's grammY framework, unrecognized slash commands are silently ignored by default. Try /help to see all available commands.`;
+  }
+}
+
+function copyPrompt() {
+  const text = document.getElementById("promptOutput").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector(".copy-btn");
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = "Copy";
+      btn.classList.remove("copied");
+    }, 2000);
+  });
+}
+
+// === TABS ===
+function showTab(tab) {
+  state.activeTab = tab;
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll("[id^='tab-']").forEach(t => t.classList.add("hidden"));
+  document.getElementById("tab-" + tab).classList.remove("hidden");
+  event.target.classList.add("active");
+}
+
+// === RENDER ===
+function renderCommands() {
+  const list = document.getElementById("cmdList");
+  list.innerHTML = SLASH_COMMANDS.map(c => `
+    <div class="cmd-item" onclick="setMessage('${c.cmd}')">
+      <div class="cmd-name">${c.cmd}</div>
+      <div class="cmd-desc">${c.desc}</div>
+    </div>
+  `).join("");
+}
+
+function renderSkills() {
+  const list = document.getElementById("skillList");
+  list.innerHTML = SKILLS.map(s => `
+    <div class="skill-item" onclick="setMessage('${escapeHtml(s.examples[0])}')">
+      <div class="skill-header">
+        <div class="skill-name">${s.name}</div>
+        <div class="skill-cat">${s.category}</div>
+      </div>
+      <div class="skill-desc">${s.description}</div>
+      <div class="skill-trigger">${escapeHtml(s.triggerPattern)}</div>
+      <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
+        ${s.examples.map(e => `<span style="background:rgba(62,207,142,0.08); border:1px solid rgba(62,207,142,0.2); border-radius:4px; padding:2px 8px; font-size:11px; color:var(--green); cursor:pointer;" onclick="event.stopPropagation(); setMessage('${escapeHtml(e)}')">"${escapeHtml(e)}"</span>`).join("")}
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderChips() {
+  const chipBar = document.getElementById("chips");
+  const slashCmds = ["/skills", "/help", "/whatcanido"].map(c =>
+    `<span class="hint-chip slash" onclick="setMessage('${c}')">${c}</span>`
+  );
+  const chatExamples = ["brainstorm a feature", "make a plan", "what's the weather?"].map(e =>
+    `<span class="hint-chip" onclick="setMessage('${e}')">${e}</span>`
+  );
+  chipBar.innerHTML = [...slashCmds, ...chatExamples].join("");
+}
+
+function renderPresets() {
+  const container = document.getElementById("presets");
+  container.innerHTML = PRESETS.map(p => `
+    <span class="preset-btn" onclick="setMessage('${escapeHtml(p.text)}')">${p.label}</span>
+  `).join("");
+}
+
+function setMessage(text) {
+  const input = document.getElementById("msgInput");
+  input.value = text;
+  analyze();
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+// === INIT ===
+renderCommands();
+renderSkills();
+renderChips();
+renderPresets();
+analyze();
+</script>
+
+</body>
+</html>

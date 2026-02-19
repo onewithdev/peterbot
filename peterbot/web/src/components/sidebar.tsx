@@ -1,15 +1,12 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import {
   LayoutDashboard,
-  Sparkles,
-  Brain,
   Activity,
   Clock,
   Settings,
   Terminal,
   Bot,
   LogOut,
-  Archive,
   BookOpen,
   MessageSquare,
   Zap,
@@ -33,20 +30,20 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: "Overview", path: "/", icon: LayoutDashboard },
-  { label: "Soul", path: "/soul", icon: Sparkles },
-  { label: "Memory", path: "/memory", icon: Brain },
-  { label: "Monitor", path: "/monitor", icon: Activity },
-  { label: "Schedules", path: "/schedules", icon: Clock },
-  { label: "Sessions", path: "/sessions", icon: Archive },
-  { label: "Solutions", path: "/solutions", icon: BookOpen },
   { label: "Chat", path: "/chat", icon: MessageSquare },
+  { label: "Overview", path: "/", icon: LayoutDashboard },
+  { label: "Jobs", path: "/jobs", icon: Activity },
+  { label: "Schedules", path: "/schedules", icon: Clock },
+  { label: "Solutions", path: "/solutions", icon: BookOpen },
   { label: "Skills", path: "/skills", icon: Zap, isNew: true },
   { label: "Integrations", path: "/integrations", icon: Hexagon, isNew: true },
-  { label: "Config", path: "/config", icon: Settings },
+  { label: "Settings", path: "/settings", icon: Settings },
   { label: "About", path: "/about", icon: Info, isNew: true },
   { label: "Dev Console", path: "/console", icon: Terminal, external: true },
 ];
+
+// Routes that should use prefix matching for active state (support nested routes)
+const prefixMatchPaths = ["/settings", "/jobs"];
 
 export function Sidebar() {
   const location = useLocation();
@@ -70,7 +67,14 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = location.pathname === item.path;
+          // Overview must use exact match only, otherwise it would appear active on every route
+          // Settings and Jobs use prefix match to support nested routes (e.g., /settings/soul, /jobs/history)
+          // All other items use exact match
+          const isActive = item.path === "/"
+            ? location.pathname === "/"
+            : prefixMatchPaths.includes(item.path)
+              ? location.pathname.startsWith(item.path)
+              : location.pathname === item.path;
 
           // External links (Dev Console) open in new tab
           if (item.external) {

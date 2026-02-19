@@ -193,6 +193,24 @@ const E2B_KEYWORDS = [
 ];
 
 /**
+ * Keywords that indicate a task likely needs integration actions.
+ * These trigger enabling the executeComposioAction tool.
+ */
+const INTEGRATION_KEYWORDS = [
+  "email",
+  "gmail",
+  "send",
+  "github",
+  "calendar",
+  "drive",
+  "notion",
+  "linear",
+  "issue",
+  "event",
+  "file",
+];
+
+/**
  * Determine if a task likely needs E2B code execution.
  *
  * Uses keyword heuristics to decide whether to attach the runCode tool.
@@ -204,6 +222,20 @@ const E2B_KEYWORDS = [
 export function shouldUseE2B(input: string): boolean {
   const lowerInput = input.toLowerCase();
   return E2B_KEYWORDS.some((keyword) => lowerInput.includes(keyword));
+}
+
+/**
+ * Determine if a task likely needs integration actions.
+ *
+ * Uses keyword heuristics to decide whether to attach the executeComposioAction tool.
+ * This enables connected apps like Gmail, GitHub, Calendar, etc.
+ *
+ * @param input - The user's task input
+ * @returns true if the task likely needs integration actions
+ */
+export function shouldUseIntegrations(input: string): boolean {
+  const lowerInput = input.toLowerCase();
+  return INTEGRATION_KEYWORDS.some((keyword) => lowerInput.includes(keyword));
 }
 
 /**
@@ -471,11 +503,19 @@ async function processJob(job: Job): Promise<void> {
     // Build system prompt (now async to read config files)
     const systemPrompt = await buildSystemPrompt(job.chatId, job.skillSystemPrompt ?? undefined);
 
-    // Determine if this task needs code execution tools
-    const tools = shouldUseE2B(job.input) ? peterbotTools : undefined;
+    // Determine if this task needs tools (code execution or integrations)
+    const needsE2B = shouldUseE2B(job.input);
+    const needsIntegrations = shouldUseIntegrations(job.input);
+    const tools = needsE2B || needsIntegrations ? peterbotTools : undefined;
 
     if (tools) {
-      console.log(`[Worker] Job ${shortId} requires code execution, enabling tools`);
+      if (needsE2B && needsIntegrations) {
+        console.log(`[Worker] Job ${shortId} requires code execution and integrations, enabling tools`);
+      } else if (needsE2B) {
+        console.log(`[Worker] Job ${shortId} requires code execution, enabling tools`);
+      } else {
+        console.log(`[Worker] Job ${shortId} requires integrations, enabling tools`);
+      }
     }
 
     // Call the AI model
