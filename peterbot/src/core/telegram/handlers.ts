@@ -35,6 +35,19 @@ import {
 import { saveMessage } from "../../features/chat/repository.js";
 import { getEnabledSkills } from "../../features/skills/repository.js";
 import type { Skill } from "../../features/skills/schema.js";
+import {
+  addDocument,
+  refreshDocumentByName,
+} from "../../features/documents/service.js";
+import {
+  getCapabilities,
+  getChangelog,
+  getEnabledSkillCapabilities,
+  formatCapabilitiesSummary,
+  formatChangelogForTelegram,
+  formatSkillsCapabilityList,
+  isCapabilitiesQuery,
+} from "../../features/capabilities/service.js";
 
 /**
  * Safely save a message to the database without throwing.
@@ -115,7 +128,7 @@ export function formatScheduleCreated(
 
 /**
  * Format the help message with all available commands.
- * Grouped by category: Core, Scheduling, and Solutions.
+ * Grouped by category: Core, Scheduling, Solutions, and Self-Awareness.
  *
  * @returns Formatted help message in Markdown
  */
@@ -135,6 +148,10 @@ export function formatHelpMessage(): string {
     `*Solutions*\n` +
     `\`/solutions\` — List saved solutions\n` +
     `Reply "save this solution" to a completed job\n\n` +
+    `*Self-Awareness*\n` +
+    `\`/whatcanido\` — Show my capabilities\n` +
+    `\`/skills\` — List active skills\n` +
+    `\`/changelog\` — Show version history\n\n` +
     `Send any task without \`/\` to get started!`
   );
 }
@@ -176,7 +193,8 @@ type PendingAction =
   | { type: "suggestion"; originalInput: string; solution: Solution }
   | { type: "save"; jobs: Job[] }
   | { type: "schedule"; jobId: string; input: string }
-  | { type: "schedule_from_button"; jobInput: string; expiresAt: number };
+  | { type: "schedule_from_button"; jobInput: string; expiresAt: number }
+  | { type: "save_url"; url: string; name: string; expiresAt: number };
 
 const pendingActions = new Map<string, PendingAction>();
 
@@ -241,27 +259,6 @@ function formatSolutionsList(solutions: Solution[]): string {
 }
 
 /**
- * Format a list of skills.
- *
- * @param skills - Array of skills to format
- * @returns Formatted skills list message
- */
-function formatSkillsList(skills: Skill[]): string {
-  if (skills.length === 0) {
-    return (
-      `⚡ *Active Skills*\n\n` +
-      `No active skills loaded.`
-    );
-  }
-
-  const lines = skills.map((s) => {
-    return `• *${s.name}* (${s.category}): \`${s.triggerPattern}\``;
-  });
-
-  return `⚡ *Active Skills (${skills.length}):*\n\n` + lines.join("\n");
-}
-
-/**
  * Find a matching skill for the given text.
  *
  * @param skills - Array of enabled skills
@@ -281,6 +278,66 @@ function findMatchingSkill(skills: Skill[], text: string): string | null {
     }
   }
   return null;
+}
+
+/**
+ * Check if text is a "remember this" command.
+ * Patterns: "remember this: <url>" or "remember this <url>"
+ */
+function extractRememberThisUrl(text: string): string | null {
+  const patterns = [
+    /remember this:\s*(.+)/i,
+    /remember this\s+(.+)/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Check if text is a "refresh" command.
+ * Pattern: "refresh <doc name>"
+ */
+function extractRefreshDocName(text: string): string | null {
+  const match = text.match(/^refresh\s+(.+)$/i);
+  return match?.[1]?.trim() ?? null;
+}
+
+/**
+ * Extract URL from text if present.
+ * Returns the first URL found, or null if no URL detected.
+ */
+function extractUrl(text: string): string | null {
+  // Match URLs starting with http:// or https://
+  const urlPattern = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/i;
+  const match = text.match(urlPattern);
+  return match?.[0] ?? null;
+}
+
+/**
+ * Generate a document name from a URL.
+ * Uses the domain or last path segment, cleaned up for readability.
+ */
+function generateNameFromUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split("/").filter(Boolean);
+    let name = pathParts[pathParts.length - 1] || urlObj.hostname || "Saved Document";
+    // Remove file extensions and clean up
+    name = name.replace(/\.(html?|md|txt|pdf)$/i, "").replace(/[_-]/g, " ");
+    // Capitalize first letter
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    return name;
+  } catch {
+    // Invalid URL, use as-is (truncated)
+    return url.slice(0, 50);
+  }
 }
 
 /**
@@ -856,8 +913,58 @@ Use /status to see what I'm working on.`;
       sender: "user",
     }).catch(() => {});
 
-    const enabledSkills = await getEnabledSkills(db);
-    const response = formatSkillsList(enabledSkills);
+    const enabledSkills = await getEnabledSkillCapabilities(db);
+    const response = formatSkillsCapabilityList(enabledSkills);
+    await ctx.reply(response, { parse_mode: "Markdown" });
+
+    // Save bot response (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "out",
+      content: response,
+      sender: "bot",
+    }).catch(() => {});
+  });
+
+  // Command: /whatcanido - Show capabilities summary
+  bot.command("whatcanido", async (ctx) => {
+    const chatId = ctx.chat.id.toString();
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: "/whatcanido",
+      sender: "user",
+    }).catch(() => {});
+
+    const capabilities = await getCapabilities(db);
+    const response = formatCapabilitiesSummary(capabilities);
+    await ctx.reply(response, { parse_mode: "Markdown" });
+
+    // Save bot response (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "out",
+      content: response,
+      sender: "bot",
+    }).catch(() => {});
+  });
+
+  // Command: /changelog - Show full changelog
+  bot.command("changelog", async (ctx) => {
+    const chatId = ctx.chat.id.toString();
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: "/changelog",
+      sender: "user",
+    }).catch(() => {});
+
+    const changelog = await getChangelog();
+    const response = formatChangelogForTelegram(changelog);
     await ctx.reply(response, { parse_mode: "Markdown" });
 
     // Save bot response (fire-and-forget, errors logged only)
@@ -889,6 +996,64 @@ Use /status to see what I'm working on.`;
 
     // Check for pending action
     const pending = pendingActions.get(chatId);
+
+    // URL detection: if URL present and no pending action, offer to save
+    if (!pending) {
+      const detectedUrl = extractUrl(text);
+      if (detectedUrl) {
+        const docName = generateNameFromUrl(detectedUrl);
+        
+        // Store pending action with 5-minute expiry
+        pendingActions.set(chatId, {
+          type: "save_url",
+          url: detectedUrl,
+          name: docName,
+          expiresAt: Date.now() + 5 * 60 * 1000,
+        });
+
+        const promptMessage = 
+          `🔗 *URL detected!*\n\n` +
+          `Would you like me to save this document?\n\n` +
+          `"${docName}"`;
+        
+        // Build inline keyboard with Yes/No buttons
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: "✅ Yes", callback_data: "save_url:yes" },
+              { text: "❌ No", callback_data: "save_url:no" },
+            ],
+          ],
+        };
+
+        await ctx.reply(promptMessage, { parse_mode: "Markdown", reply_markup: keyboard });
+
+        // Save bot response
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: promptMessage,
+          sender: "bot",
+        }).catch(() => {});
+        return;
+      }
+    }
+
+    // Check for natural language capabilities query
+    if (isCapabilitiesQuery(text)) {
+      const capabilities = await getCapabilities(db);
+      const response = formatCapabilitiesSummary(capabilities);
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
+      return;
+    }
 
     if (pending) {
       if (pending.type === "save") {
@@ -1163,6 +1328,191 @@ Use /status to see what I'm working on.`;
           }
         }
       }
+
+      if (pending.type === "save_url") {
+        // Check if the pending save_url action has expired (5-minute window)
+        if (Date.now() > pending.expiresAt) {
+          // Expired - clear pending and treat message normally
+          pendingActions.delete(chatId);
+          // Continue to normal flow below (do not return)
+        } else {
+          // Handle text response (yes/no)
+          const normalized = text.toLowerCase().trim();
+          const yesKeywords = ["yes", "y", "yeah", "sure", "ok", "okay"];
+          const noKeywords = ["no", "n", "nope", "cancel"];
+
+          if (yesKeywords.includes(normalized)) {
+            // User confirmed - save the document
+            try {
+              const result = await addDocument(db, { name: pending.name, source: pending.url });
+
+              let response: string;
+              if (result.fetchSuccess) {
+                response = `✅ I've saved the document "${result.document.name}".`;
+                if (result.document.contentTruncated) {
+                  response += "\n\n⚠️ Note: The content was large and has been truncated.";
+                }
+                response += "\n\nI'll reference it when relevant.";
+              } else {
+                response = `⚠️ I've saved the reference to "${result.document.name}" but couldn't fetch the content.`;
+                if (result.fetchError) {
+                  response += `\n\nError: ${result.fetchError}`;
+                }
+                response += "\n\nYou can try refreshing it later with: `refresh " + result.document.name + "`";
+              }
+
+              pendingActions.delete(chatId);
+              await ctx.reply(response, { parse_mode: "Markdown" });
+
+              // Save bot response
+              safeSaveMessage({
+                chatId,
+                direction: "out",
+                content: response,
+                sender: "bot",
+              }).catch(() => {});
+              return;
+            } catch (error) {
+              console.error("Error saving document:", error);
+              pendingActions.delete(chatId);
+              const errorResponse = "Sorry, I encountered an error while saving the document. Please try again.";
+              await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+              safeSaveMessage({
+                chatId,
+                direction: "out",
+                content: errorResponse,
+                sender: "bot",
+              }).catch(() => {});
+              return;
+            }
+          }
+
+          if (noKeywords.includes(normalized)) {
+            // User declined - clear pending and continue
+            pendingActions.delete(chatId);
+            const declineResponse = "Okay, I won't save that URL.";
+            await ctx.reply(declineResponse);
+
+            safeSaveMessage({
+              chatId,
+              direction: "out",
+              content: declineResponse,
+              sender: "bot",
+            }).catch(() => {});
+            return;
+          }
+
+          // Other message - clear pending and fall through to normal flow
+          pendingActions.delete(chatId);
+          // Continue to normal flow below
+        }
+      }
+    }
+
+    // Check for "remember this" intent
+    const rememberUrl = extractRememberThisUrl(text);
+    if (rememberUrl) {
+      try {
+        // Generate a name from the URL (domain or last path segment)
+        let name = "Saved Document";
+        try {
+          const url = new URL(rememberUrl);
+          const pathParts = url.pathname.split("/").filter(Boolean);
+          name = pathParts[pathParts.length - 1] || url.hostname || "Saved Document";
+          // Remove file extensions and clean up
+          name = name.replace(/\.(html?|md|txt|pdf)$/i, "").replace(/[_-]/g, " ");
+          // Capitalize first letter
+          name = name.charAt(0).toUpperCase() + name.slice(1);
+        } catch {
+          // Invalid URL, use as-is
+          name = rememberUrl.slice(0, 50);
+        }
+
+        const result = await addDocument(db, { name, source: rememberUrl });
+
+        let response: string;
+        if (result.fetchSuccess) {
+          response = `✅ I've saved the document "${result.document.name}".`;
+          if (result.document.contentTruncated) {
+            response += "\n\n⚠️ Note: The content was large and has been truncated.";
+          }
+          response += "\n\nI'll reference it when relevant.";
+        } else {
+          response = `⚠️ I've saved the reference to "${result.document.name}" but couldn't fetch the content.`;
+          if (result.fetchError) {
+            response += `\n\nError: ${result.fetchError}`;
+          }
+          response += "\n\nYou can try refreshing it later with: `refresh " + result.document.name + "`";
+        }
+
+        await ctx.reply(response, { parse_mode: "Markdown" });
+
+        // Save bot response
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: response,
+          sender: "bot",
+        }).catch(() => {});
+      } catch (error) {
+        console.error("Error saving document:", error);
+        const errorResponse = "Sorry, I encountered an error while saving the document. Please try again.";
+        await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: errorResponse,
+          sender: "bot",
+        }).catch(() => {});
+      }
+      return;
+    }
+
+    // Check for "refresh" command
+    const refreshDocName = extractRefreshDocName(text);
+    if (refreshDocName) {
+      try {
+        const result = await refreshDocumentByName(db, refreshDocName);
+
+        let response: string;
+        if (!result.document) {
+          response = `❌ I couldn't find a document named "${refreshDocName}".`;
+        } else if (result.success) {
+          response = `✅ I've refreshed "${result.document.name}".`;
+          if (result.document.contentTruncated) {
+            response += "\n\n⚠️ Note: The content was large and has been truncated.";
+          }
+        } else {
+          response = `❌ I couldn't refresh "${result.document.name}".`;
+          if (result.error) {
+            response += `\n\nError: ${result.error}`;
+          }
+        }
+
+        await ctx.reply(response, { parse_mode: "Markdown" });
+
+        // Save bot response
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: response,
+          sender: "bot",
+        }).catch(() => {});
+      } catch (error) {
+        console.error("Error refreshing document:", error);
+        const errorResponse = "Sorry, I encountered an error while refreshing the document. Please try again.";
+        await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: errorResponse,
+          sender: "bot",
+        }).catch(() => {});
+      }
+      return;
     }
 
     // Check for save intent
@@ -1556,6 +1906,84 @@ Use /status to see what I'm working on.`;
           sender: "bot",
           jobId: newJob.id,
         }).catch(() => {});
+        break;
+      }
+
+      case "save_url": {
+        await ctx.answerCallbackQuery();
+        const pending = pendingActions.get(chatId);
+
+        // Check if there's a pending save_url action
+        if (!pending || pending.type !== "save_url") {
+          const errorResponse = "⏰ This action has expired. Send the URL again to get fresh options.";
+          await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+          return;
+        }
+
+        // Check if expired
+        if (Date.now() > pending.expiresAt) {
+          pendingActions.delete(chatId);
+          const expiredResponse = "⏰ This action has expired. Send the URL again to get fresh options.";
+          await ctx.reply(expiredResponse, { parse_mode: "Markdown" });
+          return;
+        }
+
+        if (jobIdPrefix === "yes") {
+          // User confirmed - save the document
+          try {
+            const result = await addDocument(db, { name: pending.name, source: pending.url });
+
+            let response: string;
+            if (result.fetchSuccess) {
+              response = `✅ I've saved the document "${result.document.name}".`;
+              if (result.document.contentTruncated) {
+                response += "\n\n⚠️ Note: The content was large and has been truncated.";
+              }
+              response += "\n\nI'll reference it when relevant.";
+            } else {
+              response = `⚠️ I've saved the reference to "${result.document.name}" but couldn't fetch the content.`;
+              if (result.fetchError) {
+                response += `\n\nError: ${result.fetchError}`;
+              }
+              response += "\n\nYou can try refreshing it later with: `refresh " + result.document.name + "`";
+            }
+
+            pendingActions.delete(chatId);
+            await ctx.reply(response, { parse_mode: "Markdown" });
+
+            // Save bot response
+            safeSaveMessage({
+              chatId,
+              direction: "out",
+              content: response,
+              sender: "bot",
+            }).catch(() => {});
+          } catch (error) {
+            console.error("Error saving document:", error);
+            pendingActions.delete(chatId);
+            const errorResponse = "Sorry, I encountered an error while saving the document. Please try again.";
+            await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+            safeSaveMessage({
+              chatId,
+              direction: "out",
+              content: errorResponse,
+              sender: "bot",
+            }).catch(() => {});
+          }
+        } else if (jobIdPrefix === "no") {
+          // User declined
+          pendingActions.delete(chatId);
+          const declineResponse = "Okay, I won't save that URL.";
+          await ctx.reply(declineResponse);
+
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: declineResponse,
+            sender: "bot",
+          }).catch(() => {});
+        }
         break;
       }
 

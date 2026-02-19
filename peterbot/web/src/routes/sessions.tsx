@@ -33,19 +33,22 @@ function SessionsPage() {
   const sessions: ApiSession[] = sessionsData?.sessions ?? []
 
   // Fetch config
-  const { data: configData, isLoading: isLoadingConfig } = useQuery<ConfigResponse>({
+  const { data: configData, isLoading: isLoadingConfig } = useQuery<ConfigResponse | null>({
     queryKey: ["config", "compaction_threshold"],
     queryFn: async () => {
       const response = await api.config[":key"].$get({
         param: { key: "compaction_threshold" },
       })
-      return response.json()
+      if (!response.ok) {
+        return null
+      }
+      return response.json() as Promise<ConfigResponse>
     },
   })
 
   // Initialize threshold input when config loads
   useEffect(() => {
-    if (configData?.value) {
+    if (configData && 'value' in configData && configData.value) {
       setThresholdInput(configData.value)
     }
   }, [configData])

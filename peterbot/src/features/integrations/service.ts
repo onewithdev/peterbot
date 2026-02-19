@@ -2,48 +2,25 @@ import { Composio } from "@composio/core";
 import { config } from "../../shared/config.js";
 import {
   getConnectedApp,
+  getConnectedApps,
   upsertConnection,
+  removeConnection,
 } from "./repository.js";
 
-// In-memory state store for pending OAuth tokens (10-minute TTL)
-interface PendingState {
-  provider: string;
-  expiresAt: number;
-}
-
-const pendingStates = new Map<string, PendingState>();
-
 /**
- * Generate and store a state token for OAuth flow.
+ * Toolkit slug to Peterbot provider ID mapping.
+ * Maps Composio toolkit slugs to our internal provider identifiers.
  */
-function generateStateToken(provider: string): string {
-  const state = crypto.randomUUID();
-  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-  pendingStates.set(state, { provider, expiresAt });
-  return state;
-}
-
-/**
- * Validate and consume a state token.
- * Returns the associated provider or null if invalid/expired.
- */
-export function validateAndConsumeState(state: string): string | null {
-  const pending = pendingStates.get(state);
-  
-  if (!pending) {
-    return null;
-  }
-  
-  // Clean up
-  pendingStates.delete(state);
-  
-  // Check expiry
-  if (Date.now() > pending.expiresAt) {
-    return null;
-  }
-  
-  return pending.provider;
-}
+const TOOLKIT_TO_PROVIDER: Record<string, string> = {
+  gmail: "gmail",
+  googledocs: "googledocs",
+  googlesheets: "googlesheets",
+  google_drive: "google_drive",
+  googlecalendar: "googlecalendar",
+  github: "github",
+  notion: "notion",
+  linear: "linear",
+};
 
 /**
  * Check if Composio is configured.
@@ -62,14 +39,19 @@ function getClient(): Composio | null {
   return new Composio({ apiKey: config.composioApiKey });
 }
 
-export type OAuthUrlResult =
-  | { redirectUrl: string; state: string }
+export type SyncResult =
+  | {
+      added: string[];
+      removed: string[];
+      unchanged: string[];
+    }
   | { error: "not_configured" | "sdk_error"; message: string };
 
 /**
- * Get OAuth URL for connecting to a provider.
+ * Sync connected accounts from Composio to local DB.
+ * Fetches all connected accounts for the entity and updates local state.
  */
-export async function getOAuthUrl(provider: string): Promise<OAuthUrlResult> {
+export async function syncFromComposio(): Promise<SyncResult> {
   if (!isConfigured()) {
     return {
       error: "not_configured",
@@ -86,27 +68,73 @@ export async function getOAuthUrl(provider: string): Promise<OAuthUrlResult> {
   }
 
   try {
-    // Use the link method to create a connection link for the user
-    // This generates a redirect URL for OAuth
-    const connectionRequest = await client.connectedAccounts.link(
-      "peterbot-user",
-      provider,
-      {
-        callbackUrl: "/api/integrations/callback",
+    // Fetch all connected accounts for this user
+    const accounts = await client.connectedAccounts.list({
+      userIds: ["peterbot-user"],
+      statuses: ["ACTIVE"],
+    });
+
+    const added: string[] = [];
+    const unchanged: string[] = [];
+    const currentProviders = new Set<string>();
+
+    // Process each connected account
+    if (accounts.items) {
+      for (const account of accounts.items) {
+        const toolkitSlug = account.toolkit?.slug;
+        if (!toolkitSlug) continue;
+
+        // Map toolkit slug to provider ID
+        const provider = TOOLKIT_TO_PROVIDER[toolkitSlug];
+        if (!provider) {
+          console.warn(`[sync] Unknown toolkit slug: ${toolkitSlug}`);
+          continue;
+        }
+
+        currentProviders.add(provider);
+
+        // Get account email from params
+        const accountEmail =
+          (account.params?.email as string | undefined) ||
+          (account.params?.login as string | undefined) ||
+          null;
+
+        // Check if already exists in DB
+        const existing = await getConnectedApp(undefined, provider);
+
+        // Upsert to DB
+        await upsertConnection(undefined, {
+          provider,
+          composioEntityId: "peterbot-user",
+          accountEmail,
+          enabled: true,
+        });
+
+        if (existing) {
+          unchanged.push(provider);
+        } else {
+          added.push(provider);
+        }
       }
-    );
+    }
 
-    const state = generateStateToken(provider);
+    // Find providers that were removed from Composio but still in DB
+    const dbApps = await getConnectedApps();
+    const removed: string[] = [];
 
-    return {
-      redirectUrl: connectionRequest.redirectUrl!,
-      state,
-    };
+    for (const dbApp of dbApps) {
+      if (!currentProviders.has(dbApp.provider)) {
+        await removeConnection(undefined, dbApp.provider);
+        removed.push(dbApp.provider);
+      }
+    }
+
+    return { added, removed, unchanged };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
       error: "sdk_error",
-      message: `Failed to initiate OAuth: ${message}`,
+      message: `Failed to sync from Composio: ${message}`,
     };
   }
 }
@@ -118,7 +146,9 @@ export type ConnectionStatusResult =
 /**
  * Check connection status for a provider.
  */
-export async function checkConnection(provider: string): Promise<ConnectionStatusResult> {
+export async function checkConnection(
+  provider: string
+): Promise<ConnectionStatusResult> {
   if (!isConfigured()) {
     return {
       error: "not_configured",
@@ -147,9 +177,10 @@ export async function checkConnection(provider: string): Promise<ConnectionStatu
     }
 
     const account = accounts.items[0];
-    
+
     // Get account email from params if available
-    const accountEmail = (account.params?.email as string | undefined) ||
+    const accountEmail =
+      (account.params?.email as string | undefined) ||
       (account.params?.login as string | undefined) ||
       null;
 
@@ -230,7 +261,9 @@ export type RevokeResult =
 /**
  * Revoke a connection to a provider.
  */
-export async function revokeConnection(provider: string): Promise<RevokeResult> {
+export async function revokeConnection(
+  provider: string
+): Promise<RevokeResult> {
   if (!isConfigured()) {
     return {
       error: "not_configured",

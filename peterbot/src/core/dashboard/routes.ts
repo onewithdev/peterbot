@@ -56,6 +56,12 @@ import {
 import { scanSkillsOnce } from "../../features/skills/loader.js";
 import { chatRoutes } from "./chat-routes.js";
 import { integrationsRoutes } from "./integrations-routes.js";
+import { documentsRoutes } from "./documents-routes.js";
+import {
+  getCapabilities,
+  getChangelog,
+  getChangelogRaw,
+} from "../../features/capabilities/service.js";
 import {
   parseNaturalSchedule,
   calculateNextRun,
@@ -785,7 +791,44 @@ const app = new Hono()
   // Integrations API (Protected)
   // ==========================================================================
 
-  .route("/integrations", integrationsRoutes);
+  .route("/integrations", integrationsRoutes)
+
+  // ==========================================================================
+  // Documents API (Protected)
+  // ==========================================================================
+
+  .route("/documents", documentsRoutes)
+
+  // ==========================================================================
+  // Capabilities API (Protected)
+  // ==========================================================================
+
+  /**
+   * GET /api/capabilities
+   * Get full capabilities summary including skills, apps, and changelog.
+   */
+  .get("/capabilities", passwordAuth, async (c) => {
+    const capabilities = await getCapabilities();
+    return c.json({ capabilities });
+  })
+
+  /**
+   * GET /api/changelog
+   * Get the full changelog as structured data.
+   */
+  .get("/changelog", passwordAuth, async (c) => {
+    const changelog = await getChangelog();
+    return c.json({ changelog });
+  })
+
+  /**
+   * GET /api/changelog/raw
+   * Get the raw markdown content of the changelog.
+   */
+  .get("/changelog/raw", passwordAuth, async (c) => {
+    const content = await getChangelogRaw();
+    return c.json({ content });
+  });
 
 // ============================================================================
 // Exports
