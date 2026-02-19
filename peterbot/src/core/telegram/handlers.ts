@@ -158,7 +158,8 @@ export function formatSchedulesList(schedules: Schedule[]): string {
 type PendingAction =
   | { type: "suggestion"; originalInput: string; solution: Solution }
   | { type: "save"; jobs: Job[] }
-  | { type: "schedule"; jobId: string; input: string };
+  | { type: "schedule"; jobId: string; input: string }
+  | { type: "schedule_from_button"; jobInput: string; expiresAt: number };
 
 const pendingActions = new Map<string, PendingAction>();
 
@@ -504,8 +505,12 @@ Use /status to see what I'm working on.`,
         nextRunAt,
       });
 
+      const buttons = getButtonsForContext("schedule_created");
+      const keyboard = buildInlineKeyboard(buttons);
+
       await ctx.reply(formatScheduleCreated(schedule, parsed.description), {
         parse_mode: "Markdown",
+        reply_markup: keyboard,
       });
     } catch (error) {
       console.error("Error creating schedule:", error);
@@ -683,6 +688,68 @@ Use /status to see what I'm working on.`,
           return;
         }
       }
+
+      if (pending.type === "schedule_from_button") {
+        // Check if the pending schedule action has expired (5-minute window)
+        if (Date.now() > pending.expiresAt) {
+          // Expired - clear pending and treat message normally
+          pendingActions.delete(chatId);
+          // Continue to normal flow below (do not return)
+        } else {
+          // Valid - handle schedule timing input
+          const when = text.trim();
+
+          try {
+            // Parse the natural language schedule
+            const parsed = await parseNaturalSchedule(when);
+
+            if (parsed.confidence < 0.5) {
+              await ctx.reply(
+                `❌ Could not understand the schedule.\n\n` +
+                  `Try formats like:\n` +
+                  `• every Monday at 9am\n` +
+                  `• every weekday at 8:30am\n` +
+                  `• every day at midnight\n\n` +
+                  `Or reply "cancel" to abort.`,
+                { parse_mode: "Markdown" }
+              );
+              return;
+            }
+
+            // Calculate next run time
+            const nextRunAt = calculateNextRun(parsed.cron);
+
+            // Create the schedule using the job input from the pending action
+            const schedule = await createSchedule(db, {
+              description: parsed.description,
+              naturalSchedule: when,
+              parsedCron: parsed.cron,
+              prompt: pending.jobInput,
+              enabled: true,
+              nextRunAt,
+            });
+
+            pendingActions.delete(chatId);
+
+            const buttons = getButtonsForContext("schedule_created");
+            const keyboard = buildInlineKeyboard(buttons);
+
+            await ctx.reply(formatScheduleCreated(schedule, parsed.description), {
+              parse_mode: "Markdown",
+              reply_markup: keyboard,
+            });
+            return;
+          } catch (error) {
+            console.error("Error creating schedule:", error);
+            pendingActions.delete(chatId);
+            await ctx.reply(
+              "Sorry, I encountered an error while creating the schedule. Please try again.",
+              { parse_mode: "Markdown" }
+            );
+            return;
+          }
+        }
+      }
     }
 
     // Check for save intent
@@ -762,7 +829,7 @@ Use /status to see what I'm working on.`,
     const messageDate = ctx.callbackQuery.message?.date;
     if (messageDate && isCallbackExpired(messageDate)) {
       await ctx.answerCallbackQuery({
-        text: "This button has expired. Please use commands instead.",
+        text: "⏰ This action has expired. Send a new message to get fresh options.",
         show_alert: true,
       });
       return;
@@ -857,18 +924,15 @@ Use /status to see what I'm working on.`,
           return;
         }
 
-        // Store pending schedule action with job input
+        // Store pending schedule action with job input and 5-minute expiry
         pendingActions.set(chatId, {
-          type: "schedule",
-          jobId: job.id,
-          input: job.input,
+          type: "schedule_from_button",
+          jobInput: job.input,
+          expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes from now
         });
 
         await ctx.reply(
-          `📅 *Schedule this task*\n\n` +
-            `Job: \`${jobIdPrefix}\`\n` +
-            `Task: ${job.input.slice(0, 50)}${job.input.length > 50 ? "..." : ""}\n\n` +
-            `Please reply with when to run this (e.g., "every monday 9am", "daily at 8am"):`,
+          `When should I run this?`,
           { parse_mode: "Markdown" }
         );
         break;

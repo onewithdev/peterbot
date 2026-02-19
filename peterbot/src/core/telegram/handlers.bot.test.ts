@@ -1,15 +1,25 @@
-// Set env vars BEFORE any imports to ensure config module picks them up
-process.env.TELEGRAM_BOT_TOKEN = "fake-token-for-testing";
-process.env.TELEGRAM_CHAT_ID = "12345";
-process.env.GOOGLE_API_KEY = "fake-google-key";
-process.env.E2B_API_KEY = "fake-e2b-key";
-process.env.DASHBOARD_PASSWORD = "fake-password";
-
 import { describe, test, expect, beforeEach, mock } from "bun:test";
 import { Bot } from "grammy";
 import type { Update } from "grammy/types";
 
 // Module mocks must be declared BEFORE any imports that transitively load handlers
+
+// Mock config FIRST (before handlers imports it)
+mock.module("../../shared/config.js", () => ({
+  config: {
+    telegramBotToken: "fake-token-for-testing",
+    telegramChatId: "12345",
+    openaiApiKey: "fake-api-key",
+    port: 3000,
+    sqliteDbPath: ":memory:",
+    model: "test-model",
+    googleApiKey: "fake-google-key",
+    e2bApiKey: "fake-e2b-key",
+    dashboardPassword: "fake-password",
+  },
+  requireEnv: (key: string) => process.env[key] || "",
+  getOptionalEnv: (_key: string, defaultValue: string) => defaultValue,
+}));
 
 // Mock repository functions
 const mockCreateJob = mock(async (input: {
@@ -113,6 +123,16 @@ mock.module("../../db", () => ({
   db: {},
 }));
 
+// Mock solutions service
+mock.module("../../features/solutions/service", () => ({
+  autoTagSolution: mock(async () => ({
+    title: "Test Solution",
+    description: "Test description",
+    tags: ["test"],
+  })),
+  buildKeywords: mock(() => "test keywords"),
+}));
+
 // Import setupHandlers dynamically after mocks are set up
 // We use type-only import for the type, then dynamic import for the actual function
 import type { setupHandlers as SetupHandlersType } from "./handlers";
@@ -156,6 +176,18 @@ async function createTestBot() {
 
     if (method === "answerCallbackQuery") {
       return { ok: true, result: true } as any;
+    }
+
+    if (method === "editMessageText") {
+      return {
+        ok: true,
+        result: {
+          message_id: 1,
+          chat: { id: 12345, type: "private" as const },
+          date: Math.floor(Date.now() / 1000),
+          text: "",
+        },
+      } as any;
     }
 
     // Default response for other methods
@@ -246,7 +278,7 @@ function makeCallbackUpdate(
   };
 }
 
-describe("bot-level harness smoke test", () => {
+describe("bot-level harness tests", () => {
   // Use a lazy initialization pattern since we need async setup
   let bot: Bot;
   let getApiCalls: () => Array<{ method: string; payload: unknown }>;
@@ -258,62 +290,456 @@ describe("bot-level harness smoke test", () => {
     getApiCalls = testBot.getApiCalls;
     clearApiCalls = testBot.clearApiCalls;
     clearApiCalls();
+    
+    // Clear all mock call counts
+    mockCreateJob.mockClear();
+    mockGetJobsByChatId.mockClear();
+    mockGetJobById.mockClear();
+    mockGetAllSchedules.mockClear();
+    mockGenerateText.mockClear();
   });
 
-  test("dispatch /start via handleUpdate and verify sendMessage with peterbot", async () => {
-    await bot.handleUpdate(makeMessageUpdate("/start"));
+  describe("/start command", () => {
+    test("should send welcome message with peterbot branding", async () => {
+      await bot.handleUpdate(makeMessageUpdate("/start"));
 
-    const calls = getApiCalls();
-    const sendMessageCalls = calls.filter(
-      (call) => call.method === "sendMessage"
-    );
+      const calls = getApiCalls();
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
 
-    expect(sendMessageCalls.length).toBeGreaterThanOrEqual(1);
-    expect(sendMessageCalls[0].payload).toMatchObject({
-      chat_id: 12345,
+      expect(sendMessageCalls.length).toBe(1);
+      expect(sendMessageCalls[0].payload).toMatchObject({
+        chat_id: 12345,
+        parse_mode: "Markdown",
+      });
+
+      // Verify the welcome message content
+      const text = (sendMessageCalls[0].payload as any).text;
+      expect(text).toContain("peterbot");
+      expect(text).toContain("👋 Hi!");
+      expect(text).toContain("Send me a task");
+      expect(text).toContain("/status");
     });
 
-    // Check that the text contains "peterbot"
-    const text = (sendMessageCalls[0].payload as any).text;
-    expect(text).toContain("peterbot");
+    test("should include inline keyboard with quick actions", async () => {
+      await bot.handleUpdate(makeMessageUpdate("/start"));
+
+      const calls = getApiCalls();
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+
+      expect(sendMessageCalls.length).toBe(1);
+      
+      const payload = sendMessageCalls[0].payload as any;
+      expect(payload.reply_markup).toBeDefined();
+      expect(payload.reply_markup.inline_keyboard).toBeDefined();
+      expect(Array.isArray(payload.reply_markup.inline_keyboard)).toBe(true);
+    });
   });
 
-  test("dispatch /help command", async () => {
-    await bot.handleUpdate(makeMessageUpdate("/help"));
+  describe("callback_query actions", () => {
+    test("should process callback_query with help action and answer it", async () => {
+      const now = Math.floor(Date.now() / 1000);
+      await bot.handleUpdate(makeCallbackUpdate("help", now));
 
-    const calls = getApiCalls();
-    const sendMessageCalls = calls.filter(
-      (call) => call.method === "sendMessage"
-    );
+      const calls = getApiCalls();
+      
+      // Should answer the callback query
+      const answerCalls = calls.filter(
+        (call) => call.method === "answerCallbackQuery"
+      );
+      expect(answerCalls.length).toBe(1);
+      expect((answerCalls[0].payload as any).callback_query_id).toBeDefined();
 
-    expect(sendMessageCalls.length).toBeGreaterThanOrEqual(1);
+      // Should send help message as a new message
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+      expect(sendMessageCalls.length).toBe(1);
+      
+      const sendPayload = sendMessageCalls[0].payload as any;
+      expect(sendPayload.chat_id).toBe(12345);
+      expect(sendPayload.parse_mode).toBe("Markdown");
+      expect(sendPayload.text).toContain("📖");
+      expect(sendPayload.text).toContain("peterbot Commands");
+    });
+
+    test("should process callback_query with schedules action", async () => {
+      const now = Math.floor(Date.now() / 1000);
+      await bot.handleUpdate(makeCallbackUpdate("schedules", now));
+
+      const calls = getApiCalls();
+      
+      // Should answer the callback query
+      const answerCalls = calls.filter(
+        (call) => call.method === "answerCallbackQuery"
+      );
+      expect(answerCalls.length).toBe(1);
+
+      // Should send schedules list as a new message
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+      expect(sendMessageCalls.length).toBe(1);
+      
+      const sendPayload = sendMessageCalls[0].payload as any;
+      expect(sendPayload.text).toContain("No schedules yet");
+    });
+
+    test("should ignore expired callbacks (older than 5 minutes)", async () => {
+      const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 6 * 60; // 6 minutes ago
+      await bot.handleUpdate(makeCallbackUpdate("help", fiveMinutesAgo));
+
+      const calls = getApiCalls();
+      
+      // Should answer the callback query with expiration warning
+      const answerCalls = calls.filter(
+        (call) => call.method === "answerCallbackQuery"
+      );
+      expect(answerCalls.length).toBe(1);
+      expect((answerCalls[0].payload as any).text).toContain("expired");
+
+      // But should NOT send a new message (callback expired)
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+      expect(sendMessageCalls.length).toBe(0);
+    });
+
+    test("should process callback_query with solutions action", async () => {
+      const now = Math.floor(Date.now() / 1000);
+      await bot.handleUpdate(makeCallbackUpdate("solutions", now));
+
+      const calls = getApiCalls();
+      
+      // Should answer the callback query
+      const answerCalls = calls.filter(
+        (call) => call.method === "answerCallbackQuery"
+      );
+      expect(answerCalls.length).toBe(1);
+
+      // Should send solutions list as a new message
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+      expect(sendMessageCalls.length).toBe(1);
+      
+      const sendPayload = sendMessageCalls[0].payload as any;
+      expect(sendPayload.text).toContain("No solutions yet");
+    });
+
+    test("should process schedule callback (fresh) and prompt for timing", async () => {
+      // Mock a completed job for the callback to find
+      mockGetJobsByChatId.mockResolvedValueOnce([
+        {
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          type: "task",
+          status: "completed",
+          input: "Analyze Q4 sales data",
+          chatId: "12345",
+          output: "Q4 analysis results",
+          delivered: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const now = Math.floor(Date.now() / 1000);
+      await bot.handleUpdate(makeCallbackUpdate("schedule:550e8400", now));
+
+      const calls = getApiCalls();
+      
+      // Should answer the callback query
+      const answerCalls = calls.filter(
+        (call) => call.method === "answerCallbackQuery"
+      );
+      expect(answerCalls.length).toBe(1);
+
+      // Should send message asking for schedule timing
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+      expect(sendMessageCalls.length).toBe(1);
+      
+      const sendPayload = sendMessageCalls[0].payload as any;
+      expect(sendPayload.text).toBe("When should I run this?");
+    });
+
+    test("should process save callback and create solution", async () => {
+      // Mock a completed job for the callback to find
+      mockGetJobsByChatId.mockResolvedValueOnce([
+        {
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          type: "task",
+          status: "completed",
+          input: "Analyze Q4 sales data",
+          chatId: "12345",
+          output: "Q4 analysis results",
+          delivered: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const now = Math.floor(Date.now() / 1000);
+      await bot.handleUpdate(makeCallbackUpdate("save:550e8400", now));
+
+      const calls = getApiCalls();
+      
+      // Should answer the callback query
+      const answerCalls = calls.filter(
+        (call) => call.method === "answerCallbackQuery"
+      );
+      expect(answerCalls.length).toBe(1);
+
+      // Should create a solution
+      expect(mockCreateSolution).toHaveBeenCalled();
+
+      // Should send confirmation message
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+      expect(sendMessageCalls.length).toBe(1);
+      
+      const sendPayload = sendMessageCalls[0].payload as any;
+      expect(sendPayload.text).toContain("Solution saved");
+    });
+
+    test("should expire pending schedule state after 5 minutes", async () => {
+      // First, trigger a schedule callback to set pending state
+      mockGetJobsByChatId.mockResolvedValueOnce([
+        {
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          type: "task",
+          status: "completed",
+          input: "Analyze Q4 sales data",
+          chatId: "12345",
+          output: "Q4 analysis results",
+          delivered: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const now = Math.floor(Date.now() / 1000);
+      await bot.handleUpdate(makeCallbackUpdate("schedule:550e8400", now));
+
+      // Clear calls from the callback
+      clearApiCalls();
+      mockGetJobsByChatId.mockClear();
+      mockCreateJob.mockClear();
+
+      // Mock createJob for the normal flow (use a message with task keywords)
+      mockCreateJob.mockResolvedValueOnce({
+        id: "770e8400-e29b-41d4-a716-446655440002",
+        type: "task",
+        status: "pending",
+        input: "Research artificial intelligence after expiry",
+        chatId: "12345",
+        delivered: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Simulate time passing (6 minutes) and send a task message
+      // The pending state should be expired, so message should be treated normally
+      const futureDate = new Date(Date.now() + 6 * 60 * 1000);
+      const originalNow = Date.now;
+      Date.now = () => futureDate.getTime();
+
+      try {
+        await bot.handleUpdate(makeMessageUpdate("Research artificial intelligence after expiry"));
+
+        const calls = getApiCalls();
+        const sendMessageCalls = calls.filter(
+          (call) => call.method === "sendMessage"
+        );
+
+        // Should create a job (normal flow) instead of trying to parse as schedule
+        expect(mockCreateJob).toHaveBeenCalledWith({}, {
+          type: "task",
+          input: "Research artificial intelligence after expiry",
+          chatId: "12345",
+        });
+
+        // Should send the acknowledgment for a new job
+        expect(sendMessageCalls.length).toBe(1);
+        const sendPayload = sendMessageCalls[0].payload as any;
+        expect(sendPayload.text).toContain("Got it");
+      } finally {
+        Date.now = originalNow;
+      }
+    });
   });
 
-  test("dispatch /status command", async () => {
-    await bot.handleUpdate(makeMessageUpdate("/status"));
+  describe("/help command", () => {
+    test("should send help message with commands", async () => {
+      await bot.handleUpdate(makeMessageUpdate("/help"));
 
-    const calls = getApiCalls();
-    const sendMessageCalls = calls.filter(
-      (call) => call.method === "sendMessage"
-    );
+      const calls = getApiCalls();
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
 
-    expect(sendMessageCalls.length).toBeGreaterThanOrEqual(1);
+      expect(sendMessageCalls.length).toBe(1);
+      
+      const payload = sendMessageCalls[0].payload as any;
+      expect(payload.chat_id).toBe(12345);
+      expect(payload.parse_mode).toBe("Markdown");
+      
+      // Verify help content
+      expect(payload.text).toContain("📖");
+      expect(payload.text).toContain("peterbot Commands");
+      expect(payload.text).toContain("/start");
+      expect(payload.text).toContain("/help");
+      expect(payload.text).toContain("/status");
+      expect(payload.text).toContain("/retry");
+      expect(payload.text).toContain("/get");
+      expect(payload.text).toContain("/schedule");
+      expect(payload.text).toContain("/solutions");
+    });
   });
 
-  test("makeCallbackUpdate creates valid update structure", () => {
-    const now = Math.floor(Date.now() / 1000);
-    const update = makeCallbackUpdate("test_action", now);
+  describe("/status command", () => {
+    test("should fetch jobs and send status message", async () => {
+      mockGetJobsByChatId.mockResolvedValueOnce([
+        {
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          type: "task",
+          status: "pending",
+          input: "Test job",
+          chatId: "12345",
+          delivered: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
 
-    expect(update.callback_query).toBeDefined();
-    expect(update.callback_query?.data).toBe("test_action");
-    expect(update.callback_query?.message?.date).toBe(now);
+      await bot.handleUpdate(makeMessageUpdate("/status"));
+
+      const calls = getApiCalls();
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+
+      expect(sendMessageCalls.length).toBe(1);
+      expect(mockGetJobsByChatId).toHaveBeenCalledWith({}, "12345");
+      
+      const payload = sendMessageCalls[0].payload as any;
+      expect(payload.text).toContain("⏳ Pending");
+      expect(payload.text).toContain("550e8400");
+    });
+
+    test("should show empty status when no jobs", async () => {
+      mockGetJobsByChatId.mockResolvedValueOnce([]);
+
+      await bot.handleUpdate(makeMessageUpdate("/status"));
+
+      const calls = getApiCalls();
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+
+      expect(sendMessageCalls.length).toBe(1);
+      
+      const payload = sendMessageCalls[0].payload as any;
+      expect(payload.text).toContain("No jobs found");
+    });
   });
 
-  test("makeMessageUpdate creates valid update structure", () => {
-    const update = makeMessageUpdate("Hello bot");
+  describe("message handler", () => {
+    test("should create job for task messages", async () => {
+      mockCreateJob.mockResolvedValueOnce({
+        id: "770e8400-e29b-41d4-a716-446655440002",
+        type: "task",
+        status: "pending",
+        input: "Research artificial intelligence",
+        chatId: "12345",
+        delivered: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
-    expect(update.message).toBeDefined();
-    expect(update.message?.text).toBe("Hello bot");
-    expect(update.message?.chat.id).toBe(12345);
+      await bot.handleUpdate(makeMessageUpdate("Research artificial intelligence"));
+
+      const calls = getApiCalls();
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+
+      expect(sendMessageCalls.length).toBe(1);
+      expect(mockCreateJob).toHaveBeenCalledWith({}, {
+        type: "task",
+        input: "Research artificial intelligence",
+        chatId: "12345",
+      });
+      
+      const payload = sendMessageCalls[0].payload as any;
+      expect(payload.text).toContain("Got it");
+      expect(payload.text).toContain("770e8400"); // Short job ID
+      expect(payload.parse_mode).toBe("Markdown");
+    });
+
+    test("should handle quick messages with AI response", async () => {
+      mockGenerateText.mockResolvedValueOnce({
+        text: "Hello! How can I help you today?",
+      });
+
+      await bot.handleUpdate(makeMessageUpdate("Hello!"));
+
+      const calls = getApiCalls();
+      const sendMessageCalls = calls.filter(
+        (call) => call.method === "sendMessage"
+      );
+
+      expect(sendMessageCalls.length).toBe(1);
+      expect(mockGenerateText).toHaveBeenCalled();
+      
+      const payload = sendMessageCalls[0].payload as any;
+      expect(payload.text).toBe("Hello! How can I help you today?");
+    });
+  });
+
+  describe("utility functions", () => {
+    test("makeCallbackUpdate creates valid update structure", () => {
+      const now = Math.floor(Date.now() / 1000);
+      const update = makeCallbackUpdate("test_action", now);
+
+      expect(update.callback_query).toBeDefined();
+      expect(update.callback_query?.data).toBe("test_action");
+      expect(update.callback_query?.message?.date).toBe(now);
+    });
+
+    test("makeMessageUpdate creates valid update structure for text", () => {
+      const update = makeMessageUpdate("Hello bot");
+
+      expect(update.message).toBeDefined();
+      expect(update.message?.text).toBe("Hello bot");
+      expect(update.message?.chat.id).toBe(12345);
+      expect(update.message?.entities).toBeUndefined(); // No entities for plain text
+    });
+
+    test("makeMessageUpdate includes entities for commands", () => {
+      const update = makeMessageUpdate("/start");
+
+      expect(update.message).toBeDefined();
+      expect(update.message?.text).toBe("/start");
+      expect(update.message?.entities).toBeDefined();
+      expect(update.message?.entities?.[0].type).toBe("bot_command");
+      expect(update.message?.entities?.[0].offset).toBe(0);
+      expect(update.message?.entities?.[0].length).toBe(6);
+    });
+
+    test("makeMessageUpdate includes entities for commands with arguments", () => {
+      const update = makeMessageUpdate("/retry abc123");
+
+      expect(update.message).toBeDefined();
+      expect(update.message?.text).toBe("/retry abc123");
+      expect(update.message?.entities).toBeDefined();
+      expect(update.message?.entities?.[0].type).toBe("bot_command");
+      expect(update.message?.entities?.[0].length).toBe(6); // "/retry" length
+    });
   });
 });
