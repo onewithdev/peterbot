@@ -146,6 +146,92 @@ Example:
 
 ---
 
+## The Registry Service
+
+For this vision to work, agents need a neutral place to register, discover each other, and establish trust. This section describes the **platform layer**—a hosted service that implements the open protocol.
+
+### Business Model: Open Protocol + Hosted Service
+
+**The protocol is open.** Anyone can run their own registry, build their own discovery server, settle attestations on their own chain. No vendor lock-in.
+
+**The hosted service is convenient.** Most developers pay for the managed version because it's easier, faster, and comes with trust guarantees.
+
+**Revenue model:**
+- **Free tier**: Personal projects, up to 3 agents, public registry only
+- **Developer tier**: Unlimited agents, private handshakes, B2B chain settlement (pay per usage)
+- **Commercial tier**: Revenue share (e.g., 5%) when developers charge end users for agent services
+
+**Why developers pay:**
+1. **Don't build it themselves** - Discovery, handshake verification, settlement infrastructure
+2. **Trust signal** - "Verified by [Platform]" badge that end users demand
+3. **Network effects** - Agents on the platform can talk to each other
+4. **Payment rails** - Built-in billing, dispute resolution, insurance
+
+### Platform Positioning: First and Neutral
+
+**First-mover advantage:** Become the default registry before big players (OpenAI, Google) build their own. Embed into Claude, Cursor, and other agent platforms as the "official" discovery skill/MCP.
+
+**Neutrality as moat:** Not owned by an AI company. Not owned by a SaaS vendor. A neutral Switzerland that all parties can trust.
+
+**The bet:** Being first + being neutral = becoming the dial tone for agent coordination.
+
+### Architecture Overview
+
+**What the platform provides:**
+
+| Component | Function | Developer pays for |
+|-----------|----------|------------------|
+| **Identity Registry** | DID → endpoint + capabilities mapping | Registration, lookups |
+| **Discovery Service** | Find agents by capability, org, location | Queries |
+| **Handshake Broker** | Establish trust between orgs | Handshake creation, verification |
+| **B2B Settlement Chain** | Shared ledger for Tier 2 attestations | Transaction fees |
+| **Reputation System** | Ratings, dispute resolution, insurance | Verification badges |
+| **Payment Rails** | Billing, revenue share, payouts | Percentage of revenue |
+
+**What developers bring:**
+- Their own agents (deployed anywhere)
+- Their own databases (bookings, state, user data)
+- Their own business logic
+
+**What end users see:**
+- Nothing. They talk to their agent. The registry is invisible infrastructure.
+
+### Dashboard Experience
+
+Developers log into a Stripe-like dashboard:
+
+1. **My Agents** - List of registered agents, their DIDs, endpoints, capabilities
+2. **Connections** - Trusted orgs, pending handshakes, revoked access
+3. **Discovery Analytics** - How many times their agents were found, negotiated with, rated
+4. **Settlement History** - Attestations settled, disputes, insurance claims
+5. **Revenue** - If commercial: earnings, payouts, platform fees
+
+### Integration: The MCP/Skill Angle
+
+The registry exposes an MCP (Model Context Protocol) server or skill that AI platforms can integrate:
+
+```
+User: "Book me a room at 2pm"
+Claude: Uses MCP skill → queries registry for room-booking agents near user
+       → finds verified agent, checks handshake
+       → negotiates booking
+       → returns result
+```
+
+If Claude, Cursor, and other platforms ship with this skill pre-installed, the registry becomes the default coordination layer.
+
+### Risk: The "Email Problem"
+
+Email succeeded because SMTP is open. But nobody owns email. The protocol created massive value, but no single company captured it.
+
+**Mitigation:**
+- Revenue from convenience, not lock-in
+- Commercial tier creates ongoing value (payment processing, dispute resolution)
+- Enterprise features (SLAs, compliance, insurance) for those who need them
+- Neutral positioning makes the platform defensible against big tech
+
+---
+
 ## Open Questions
 
 1. **Who runs the B2B coordination chain?** A consortium? A decentralized network? A protocol that any chain can implement?
@@ -157,6 +243,8 @@ Example:
 4. **What about legacy SaaS?** Do agents wrap existing APIs? Or does this only work for "agent-native" services?
 
 5. **Conflict resolution**: Two agents book the same room simultaneously. Tier 1: central authority decides. Tier 3: chain finality decides. Tier 2: ???
+
+6. **Chicken-and-egg problem**: How do we get developers before there are users, and users before there are agents?
 
 ---
 

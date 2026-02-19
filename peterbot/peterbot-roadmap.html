@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>peterbot — Feature Roadmap Explorer</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #484f58;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+  }
+
+  /* ═══ HEADER ═══ */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 11px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo {
+    font-size: 17px;
+    font-weight: 800;
+    background: linear-gradient(120deg, #00b4d8, #bc8cff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.3px;
+  }
+
+  .tagline {
+    color: var(--text-muted);
+    font-size: 12px;
+    border-left: 1px solid var(--border);
+    padding-left: 12px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .stat-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 12px;
+  }
+
+  .stat-badge.done {
+    background: rgba(63, 185, 80, 0.1);
+    color: #3fb950;
+    border: 1px solid rgba(63, 185, 80, 0.25);
+  }
+
+  .stat-badge.planned {
+    background: rgba(188, 140, 255, 0.1);
+    color: #bc8cff;
+    border: 1px dashed rgba(188, 140, 255, 0.35);
+  }
+
+  .legend {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    border-left: 1px solid var(--border);
+    padding-left: 16px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .legend-swatch {
+    width: 22px;
+    height: 10px;
+    border-radius: 2px;
+  }
+
+  .legend-swatch.solid {
+    border: 2px solid #3fb950;
+    background: rgba(63, 185, 80, 0.08);
+  }
+
+  .legend-swatch.dotted {
+    border: 2px dashed #bc8cff;
+    background: transparent;
+  }
+
+  /* ═══ FILTERS ═══ */
+  .filter-bar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    border-left: 1px solid var(--border);
+    padding-left: 16px;
+  }
+
+  .filter-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    transition: all 0.12s;
+  }
+
+  .filter-btn:hover { border-color: var(--text-muted); color: var(--text); }
+  .filter-btn.active {
+    background: var(--surface2);
+    border-color: var(--text-muted);
+    color: var(--text);
+  }
+
+  /* ═══ MAIN LAYOUT ═══ */
+  .main-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  /* ═══ ROADMAP ═══ */
+  .roadmap {
+    overflow-y: auto;
+    padding: 20px 20px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .roadmap::-webkit-scrollbar { width: 5px; }
+  .roadmap::-webkit-scrollbar-track { background: transparent; }
+  .roadmap::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 3px; }
+
+  /* ═══ PHASE ═══ */
+  .phase { display: flex; flex-direction: column; gap: 10px; }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .phase-badge {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .phase-title {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .phase-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .phase-divider { height: 1px; background: var(--border); flex: 1; }
+
+  .phase-tally {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .phase-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+  }
+
+  /* ═══ CARDS ═══ */
+  .card {
+    width: 178px;
+    min-height: 105px;
+    padding: 11px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.14s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    position: relative;
+    background: var(--surface);
+  }
+
+  .card:hover { transform: translateY(-2px); }
+
+  .card.done {
+    border: 2px solid var(--phase-color);
+    background: color-mix(in srgb, var(--phase-color) 5%, var(--surface));
+  }
+
+  .card.planned {
+    border: 2px dashed var(--phase-color);
+    background: var(--surface);
+    opacity: 0.6;
+  }
+
+  .card.planned:hover { opacity: 0.85; transform: translateY(-2px); }
+  .card.hidden { display: none; }
+
+  .card.selected {
+    opacity: 1 !important;
+    box-shadow: 0 0 0 1px var(--phase-color), 0 6px 20px rgba(0,0,0,0.5);
+    transform: translateY(-2px);
+  }
+
+  .card-dot {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .card.done .card-dot { background: #3fb950; }
+  .card.planned .card-dot {
+    background: transparent;
+    border: 1.5px solid var(--phase-color);
+    opacity: 0.6;
+  }
+
+  .card-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+    padding-right: 14px;
+  }
+
+  .card-summary {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+    flex: 1;
+  }
+
+  .card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 2px;
+  }
+
+  .ctag {
+    font-size: 9px;
+    font-family: ui-monospace, 'SF Mono', monospace;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background: var(--surface2);
+    color: var(--text-dim);
+  }
+
+  /* ═══ DETAIL PANEL ═══ */
+  .detail-panel {
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .detail-panel::-webkit-scrollbar { width: 4px; }
+  .detail-panel::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 2px; }
+
+  .detail-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--text-dim);
+    font-size: 12px;
+    padding: 24px;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  .detail-empty svg { opacity: 0.25; }
+
+  .detail-content {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    flex: 1;
+  }
+
+  .detail-phase-tag {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 4px;
+    display: inline-flex;
+    width: fit-content;
+  }
+
+  .detail-name {
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.2px;
+  }
+
+  .status-pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 10px;
+    display: inline-flex;
+    width: fit-content;
+  }
+
+  .status-pill.done {
+    background: rgba(63, 185, 80, 0.12);
+    color: #3fb950;
+    border: 1px solid rgba(63, 185, 80, 0.25);
+  }
+
+  .status-pill.planned {
+    background: rgba(188, 140, 255, 0.12);
+    color: #bc8cff;
+    border: 1px dashed rgba(188, 140, 255, 0.35);
+  }
+
+  .dsec { display: flex; flex-direction: column; gap: 5px; }
+
+  .dsec-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+  }
+
+  .dsec-text {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .file-list { display: flex; flex-direction: column; gap: 4px; }
+
+  .file-chip {
+    font-family: ui-monospace, 'SF Mono', monospace;
+    font-size: 10px;
+    padding: 4px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+    word-break: break-all;
+    line-height: 1.4;
+  }
+
+  .tag-list { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  .dtag {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--surface2);
+    color: var(--text-muted);
+  }
+
+  /* ═══ PROMPT AREA ═══ */
+  .prompt-area {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: 10px 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-height: 58px;
+    max-height: 110px;
+    flex-shrink: 0;
+  }
+
+  .prompt-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    white-space: nowrap;
+    padding-top: 3px;
+    flex-shrink: 0;
+  }
+
+  .prompt-text {
+    font-size: 12px;
+    color: var(--text-muted);
+    flex: 1;
+    line-height: 1.55;
+    font-family: ui-monospace, 'SF Mono', monospace;
+    overflow-y: auto;
+  }
+
+  .prompt-text::-webkit-scrollbar { width: 3px; }
+  .prompt-text::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .copy-btn {
+    padding: 5px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.13s;
+    flex-shrink: 0;
+    font-family: inherit;
+  }
+
+  .copy-btn:hover { border-color: var(--text-muted); }
+  .copy-btn:disabled { opacity: 0.35; cursor: default; }
+  .copy-btn.copied { color: #3fb950; border-color: rgba(63,185,80,0.4); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <span class="logo">peterbot</span>
+    <span class="tagline">Personal AI Agent · Feature Roadmap Explorer</span>
+  </div>
+  <div class="header-right">
+    <div class="stat-badge done">✓ 18 implemented</div>
+    <div class="stat-badge planned">◌ 16 planned</div>
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-swatch solid"></div>
+        <span>Implemented</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch dotted"></div>
+        <span>Planned</span>
+      </div>
+    </div>
+    <div class="filter-bar">
+      <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn" onclick="setFilter('done', this)">Done</button>
+      <button class="filter-btn" onclick="setFilter('planned', this)">Planned</button>
+    </div>
+  </div>
+</header>
+
+<div class="main-layout">
+  <main class="roadmap" id="roadmap"></main>
+  <aside class="detail-panel" id="detailPanel">
+    <div class="detail-empty">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      Click any feature card<br>to explore details &amp; get<br>a ready-to-use prompt
+    </div>
+  </aside>
+</div>
+
+<footer class="prompt-area">
+  <div class="prompt-label">Prompt</div>
+  <div class="prompt-text" id="promptText">Select a feature above to generate a focused prompt.</div>
+  <button class="copy-btn" id="copyBtn" onclick="copyPrompt()" disabled>Copy</button>
+</footer>
+
+<script>
+// ═══════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════
+
+const PHASES = [
+  { id: 0, label: 'Phase 0', title: 'Tracer Bullet',    desc: 'End-to-end pipeline — every layer touched on day 1', color: '#00b4d8', done: true  },
+  { id: 1, label: 'Phase 1', title: 'Personal & Safe',  desc: 'Bot personality, web dashboard, memory, auth',        color: '#3fb950', done: true  },
+  { id: 2, label: 'Phase 2', title: 'Proactive',         desc: 'Scheduling, session compaction, solution memory',     color: '#bc8cff', done: true  },
+  { id: 3, label: 'Recent',  title: 'Feature Slices',    desc: 'Chat sync, inline buttons, documentation',            color: '#f0a84a', done: true  },
+  { id: 4, label: 'Phase 3', title: 'Extensible',        desc: 'Dark mode, Composio, knowledge base, skills',         color: '#ff6b81', done: false },
+  { id: 5, label: 'Phase 4', title: 'Powerful',          desc: 'Parallel agents, browser, email, image generation',   color: '#f97316', done: false },
+  { id: 6, label: 'Phase 5', title: 'Enterprise',        desc: 'MCP, Google Workspace, GitHub, workspace isolation',  color: '#a78bfa', done: false },
+  { id: 7, label: 'Scaling', title: 'Ejection Points',  desc: 'Pre-planned upgrade paths when the bot outgrows today\'s constraints', color: '#64748b', done: false },
+];
+
+const FEATURES = [
+  // ─── Phase 0 ───────────────────────────────────
+  {
+    id: 'telegram-bot', phase: 0, status: 'done',
+    name: 'Telegram Bot',
+    summary: 'grammy long-polling. Entry point for all user messages.',
+    desc: 'Uses grammy library with long-polling (no webhooks). Single user identified by TELEGRAM_CHAT_ID. Bot lifecycle is tied to the main server process with graceful shutdown.',
+    detail: 'grammy provides type-safe Telegram Bot API access. Long-polling means the bot works without a public URL — perfect for Railway. Single-user by design: every message is assumed to be from you.',
+    files: ['src/core/telegram/bot.ts', 'src/core/telegram/handlers.ts'],
+    tags: ['grammy', 'telegram', 'core'],
+  },
+  {
+    id: 'intent-detection', phase: 0, status: 'done',
+    name: 'Intent Detection',
+    summary: 'Heuristic classifier: short message → quick reply, long → background job.',
+    desc: 'Messages under ~150 chars with no task keywords go to quick reply. Longer messages or those containing "analyze", "create", "build", etc. are queued as background jobs.',
+    detail: 'Heuristic approach: fast, zero cost, zero latency. The ejection plan is to replace this with a small Claude call for better accuracy on ambiguous messages.',
+    files: ['src/core/telegram/intent.ts'],
+    tags: ['routing', 'heuristic'],
+  },
+  {
+    id: 'job-queue', phase: 0, status: 'done',
+    name: 'Job Queue',
+    summary: 'SQLite-backed queue. Jobs flow pending → running → done/failed.',
+    desc: 'Drizzle ORM manages the jobs table. Status machine: pending → running → completed | failed. Timestamps tracked at each transition. Job input/output stored as text.',
+    detail: 'bun:sqlite + Drizzle gives type-safe, zero-config persistence. Worker polls this table every 5s. Each job has type, input, output, status, and timestamps.',
+    files: ['src/features/jobs/schema.ts', 'src/features/jobs/repository.ts', 'src/features/jobs/service.ts'],
+    tags: ['sqlite', 'drizzle', 'queue'],
+  },
+  {
+    id: 'background-worker', phase: 0, status: 'done',
+    name: 'Background Worker',
+    summary: 'Child process polls for pending jobs, runs them, delivers results.',
+    desc: 'Spawned by server.ts as a Bun child process. Polls getPendingJobs() every 5s. Builds system prompt from soul.md + memory.md + history, calls AI with tools, executes in E2B, sends result to Telegram.',
+    detail: 'Separate process means a crashed worker doesn\'t kill the HTTP server (and vice versa). The 5s polling loop is simple and predictable — no message broker complexity.',
+    files: ['src/worker/worker.ts', 'src/core/server.ts'],
+    tags: ['worker', 'async', 'process'],
+  },
+  {
+    id: 'e2b-sandbox', phase: 0, status: 'done',
+    name: 'E2B Sandbox',
+    summary: 'Cloud-isolated code execution. Python/shell in a secure container.',
+    desc: 'Uses @e2b/code-interpreter. Each job gets a fresh sandbox. Returns stdout, stderr, and file artifacts. Sandbox is destroyed after the job completes. Blocklist checked before execution.',
+    detail: 'E2B containers are ephemeral cloud VMs. Code never runs on your Railway server. This means: safe, isolated, no file system contamination between jobs.',
+    files: ['src/worker/e2b.ts'],
+    tags: ['security', 'e2b', 'sandbox'],
+  },
+  {
+    id: 'ai-brain', phase: 0, status: 'done',
+    name: 'AI Brain',
+    summary: 'Vercel AI SDK with multi-provider support: Claude, OpenAI, Google.',
+    desc: 'Uses the ai package (Vercel AI SDK) with @ai-sdk/anthropic adapter. Provider switchable via env vars. Supports tool use for code execution. Bring-your-own-key architecture.',
+    detail: 'The Vercel AI SDK abstraction means switching from Claude to GPT-4 is one env var change. Tools are defined once and work across all providers.',
+    files: ['src/ai/client.ts', 'src/ai/tools.ts'],
+    tags: ['claude', 'vercel-ai', 'llm'],
+  },
+  {
+    id: 'telegram-commands', phase: 0, status: 'done',
+    name: 'Telegram Commands',
+    summary: '/start, /status, /get [id], /retry [id] — job lifecycle from chat.',
+    desc: 'All commands handled in handlers.ts. /status shows recent jobs with IDs and states. /get [jobId] fetches specific output. /retry [jobId] re-queues a failed job. Markdown formatting in Telegram.',
+    detail: 'Commands are the CLI of your agent. You can check what\'s running, retrieve any past result, and recover from failures — all without opening the dashboard.',
+    files: ['src/core/telegram/handlers.ts'],
+    tags: ['commands', 'ux', 'telegram'],
+  },
+
+  // ─── Phase 1 ───────────────────────────────────
+  {
+    id: 'soul-md', phase: 1, status: 'done',
+    name: 'Soul.md',
+    summary: 'Bot personality definition. Prepended to every system prompt.',
+    desc: 'Plain markdown file read at worker startup. Defines tone, values, and communication style. Editable live via the dashboard. Changes take effect on next worker poll cycle.',
+    detail: 'The soul.md approach keeps personality configurable without touching code. It\'s just text — you can tune how the bot sounds, what it prioritizes, how it handles uncertainty.',
+    files: ['soul.md', 'src/core/dashboard/files.ts'],
+    tags: ['personality', 'prompt', 'config'],
+  },
+  {
+    id: 'web-dashboard', phase: 1, status: 'done',
+    name: 'Web Dashboard',
+    summary: 'React SPA + Hono RPC. 11 pages: overview, chat, soul, memory, monitor...',
+    desc: 'Frontend: React + TanStack Router + Vite. Backend: Hono with typed RPC endpoints. Auth middleware gates all /api/* routes. 11 routes covering every bot dimension.',
+    detail: 'The dashboard is your control plane. Hono RPC gives you end-to-end type safety without a separate schema. TanStack Router handles client-side routing.',
+    files: ['src/core/dashboard/routes.ts', 'web/src/routes/'],
+    tags: ['react', 'hono', 'dashboard'],
+  },
+  {
+    id: 'two-layer-memory', phase: 1, status: 'done',
+    name: 'Two-Layer Memory',
+    summary: 'Layer 1: memory.md (permanent facts). Layer 2: SQLite job history.',
+    desc: 'memory.md stores facts like "I prefer concise answers", "timezone is PST". Read at every job start. Job history in SQLite for browsing past tasks. Dashboard /memory page for both.',
+    detail: 'The two-layer design handles different time horizons: memory.md for stable facts (months), job history for recent context (days). Ejection plan: graduate to vector search.',
+    files: ['memory.md', 'src/core/dashboard/files.ts', 'web/src/routes/memory.tsx'],
+    tags: ['memory', 'context', 'sqlite'],
+  },
+  {
+    id: 'command-blocklist', phase: 1, status: 'done',
+    name: 'Command Blocklist',
+    summary: 'Dangerous patterns checked before E2B execution. Editable from dashboard.',
+    desc: 'Blocklist stored as text patterns in config/. Worker checks generated code against blocklist before passing to E2B. Dashboard /config page for live editing.',
+    detail: 'A safety net for when the AI goes rogue. Prevents patterns like "rm -rf /", "curl | bash", credential exfiltration. Simple pattern matching — fast and auditable.',
+    files: ['config/', 'src/core/dashboard/routes.ts', 'web/src/routes/config.tsx'],
+    tags: ['security', 'blocklist', 'config'],
+  },
+  {
+    id: 'dashboard-auth', phase: 1, status: 'done',
+    name: 'Dashboard Auth',
+    summary: 'Password-protected dashboard. DASHBOARD_PASSWORD env var.',
+    desc: 'Auth middleware in Hono checks session. Login page posts password, receives session cookie valid for 24h. No accounts — single password for the single user.',
+    detail: 'Simple and secure for a single-user tool. No OAuth complexity, no user table. One env var and you\'re protected.',
+    files: ['src/core/dashboard/auth.ts', 'web/src/routes/login.tsx'],
+    tags: ['auth', 'security', 'session'],
+  },
+
+  // ─── Phase 2 ───────────────────────────────────
+  {
+    id: 'cron-scheduling', phase: 2, status: 'done',
+    name: 'Cron Scheduling',
+    summary: '"every monday 9am" → cron → auto-fired jobs. /schedules, /schedule delete.',
+    desc: 'Natural language parser converts phrases like "every day at 8am" to cron expressions. Scheduler loop (5s) checks nextRunAt. Fires job, recalculates next run. Persists across restarts.',
+    detail: 'The NLP parser uses cron-parser + custom mapping for natural phrases. nextRunAt is pre-calculated and stored, so the scheduler just does a simple timestamp comparison.',
+    files: ['src/features/cron/natural-parser.ts', 'src/features/cron/schema.ts', 'src/worker/scheduler.ts'],
+    tags: ['cron', 'nlp', 'scheduling'],
+  },
+  {
+    id: 'session-compaction', phase: 2, status: 'done',
+    name: 'Session Compaction',
+    summary: 'Auto-summarizes long conversations. Prevents context window bloat.',
+    desc: 'chatState table tracks message count per session. When threshold exceeded, Claude summarizes the history. Summary stored in sessions table, old messages truncated. Transparent to user.',
+    detail: 'Without compaction, long conversations would eventually overflow the context window or get expensive. Compaction keeps the bot functional indefinitely.',
+    files: ['src/features/compaction/service.ts', 'src/features/compaction/schema.ts'],
+    tags: ['memory', 'context', 'llm'],
+  },
+  {
+    id: 'solution-memory', phase: 2, status: 'done',
+    name: 'Solution Memory',
+    summary: 'Save jobs as reusable solutions. Auto-tagged, similarity-matched.',
+    desc: 'After task completion, inline button offers "💾 Save solution". Claude auto-generates title + tags + keywords. Similarity algorithm matches new tasks to saved solutions. /solutions lists the library.',
+    detail: 'Prevents re-solving the same problems. Similarity matching means the bot can say "I did something like this before" and reuse relevant prior work.',
+    files: ['src/features/solutions/service.ts', 'src/features/solutions/similarity.ts', 'src/features/solutions/schema.ts'],
+    tags: ['memory', 'reuse', 'similarity'],
+  },
+
+  // ─── Recent ───────────────────────────────────
+  {
+    id: 'chat-sync', phase: 3, status: 'done',
+    name: 'Chat Sync',
+    summary: '2-way Telegram ↔ Dashboard sync. WhatsApp-style UI. 5s polling.',
+    desc: 'chatMessages table stores all Telegram inbound messages and bot replies. API: GET /api/chat/messages?since=<ts>. Dashboard /chat page renders full conversation. Messages linked to jobs.',
+    detail: 'Lets you monitor all bot conversations from your browser without opening Telegram. Also useful for auditing what the bot said while you were away.',
+    files: ['src/features/chat/repository.ts', 'src/core/dashboard/chat-routes.ts', 'web/src/routes/chat.tsx'],
+    tags: ['sync', 'real-time', 'ui'],
+  },
+  {
+    id: 'inline-buttons', phase: 3, status: 'done',
+    name: 'Inline Buttons',
+    summary: 'Context-aware Telegram buttons after every response.',
+    desc: 'After task completion: "📅 Schedule this", "💾 Save solution", "❔ Help". After /start: "View schedules", "View solutions". 5-minute expiry window. Callbacks route to handlers.',
+    detail: 'Buttons reduce friction for common follow-up actions. Instead of typing "/schedule ...", one tap queues it. The 5-minute expiry prevents stale callback exploitation.',
+    files: ['src/core/telegram/buttons.ts', 'src/core/telegram/handlers.ts'],
+    tags: ['ux', 'telegram', 'callbacks'],
+  },
+  {
+    id: 'documentation', phase: 3, status: 'done',
+    name: 'Documentation',
+    summary: '/help command in Telegram. docs/commands.md and docs/features.md.',
+    desc: '/help renders formatted Markdown in Telegram with all commands grouped by category. docs/ folder has detailed reference with examples for every feature.',
+    detail: 'Inline help means you never need to open the browser to remember a command. The docs/ folder serves as the source of truth for what the bot can do.',
+    files: ['docs/commands.md', 'docs/features.md', 'src/core/telegram/handlers.ts'],
+    tags: ['docs', 'help', 'ux'],
+  },
+
+  // ─── Phase 3 ───────────────────────────────────
+  {
+    id: 'dark-mode', phase: 4, status: 'planned',
+    name: 'Dark Mode',
+    summary: 'Light/dark theme toggle in dashboard. Persisted to localStorage.',
+    desc: 'Toggle in dashboard header. CSS custom properties for theme variables. Preference persisted to localStorage. data-theme attribute on <html> switches the palette.',
+    detail: 'Small quality-of-life improvement. The dashboard is already dark-first, so this adds a light mode alternative using CSS variables already defined.',
+    files: [],
+    tags: ['ui', 'theme', 'dashboard'],
+  },
+  {
+    id: 'composio', phase: 4, status: 'planned',
+    name: 'Composio Integration',
+    summary: 'One-click OAuth to 1000+ apps: Gmail, GitHub, Notion, Slack, Drive...',
+    desc: 'User authorizes apps via dashboard OAuth flow. Tokens stored encrypted in connected_apps table. Bot uses integrations as tools in jobs. Replaces need for individual API integrations.',
+    detail: 'Composio is a unified integration layer. Instead of hand-rolling Gmail OAuth + Notion OAuth + GitHub OAuth, one Composio account gives access to 1000+ connectors. This is the key enabler for Phases 4 and 5.',
+    files: [],
+    tags: ['integrations', 'oauth', 'composio'],
+  },
+  {
+    id: 'knowledge-base', phase: 4, status: 'planned',
+    name: 'Knowledge Base',
+    summary: 'Upload PDFs, docs, spreadsheets. Vector search extends memory.',
+    desc: 'Dashboard /knowledge page for uploads. Documents chunked and embedded. Semantic search at job start pulls relevant context. Extends Phase 1\'s two-layer memory with a retrieval layer.',
+    detail: 'Enables the bot to answer questions about your documents. "Summarize the Q4 report" → bot retrieves relevant chunks from the uploaded PDF. Possible backends: SQLite-vec, Pinecone, or Chroma.',
+    files: [],
+    tags: ['rag', 'vector', 'memory'],
+  },
+  {
+    id: 'skills-system', phase: 4, status: 'planned',
+    name: 'Skills System',
+    summary: 'Drop .skill.md files into /skills/. No coding needed to extend bot.',
+    desc: 'User drops markdown files into /skills/ directory. Worker includes relevant skills in system prompt based on task type. Compatible with superpowers skill format.',
+    detail: 'The bot gains new capabilities through markdown, not code. Works exactly like how the existing superpowers library works for Claude Code — but for your personal agent. Drop in brainstorm.skill.md, writing-plans.skill.md, etc.',
+    files: [],
+    tags: ['extensibility', 'markdown', 'plugins'],
+  },
+
+  // ─── Phase 4 ───────────────────────────────────
+  {
+    id: 'agent-workers', phase: 5, status: 'planned',
+    name: 'Agent Workers',
+    summary: 'Parallel sub-agents via Vercel AI SDK. Fan out complex tasks.',
+    desc: 'Main agent decomposes a task, spawns N specialized sub-agents in parallel, aggregates results. Enables: "research this topic" → 3 parallel researchers → combined summary.',
+    detail: 'Vercel AI SDK has agent primitives for this. The worker.ts loop would need to support forking into parallel E2B sandboxes. This is a significant architectural step but the foundation is already there.',
+    files: [],
+    tags: ['agents', 'parallel', 'vercel-ai'],
+  },
+  {
+    id: 'browser-automation', phase: 5, status: 'planned',
+    name: 'Browser Automation',
+    summary: 'Playwright in E2B: form filling, scraping, screenshots.',
+    desc: 'Playwright available as a tool in the bot\'s toolkit. Bot navigates web pages, fills forms, clicks, takes screenshots — all inside an E2B container for isolation.',
+    detail: 'E2B already supports Playwright. Tasks like "fill out this form", "scrape prices from site", "screenshot this page" become possible. The browser runs in the cloud sandbox, not on your machine.',
+    files: [],
+    tags: ['playwright', 'browser', 'automation'],
+  },
+  {
+    id: 'email-integration', phase: 5, status: 'planned',
+    name: 'Email Integration',
+    summary: 'Read and reply to email via Composio. Trigger from Telegram.',
+    desc: 'Depends on Composio (Phase 3). "Summarize my unread emails", "reply to John saying...", "send this report to team@...". Uses Composio Gmail connector.',
+    detail: 'Once Composio is wired up, Gmail is one of its best-supported connectors. Email becomes just another tool the bot can call — no custom OAuth needed.',
+    files: [],
+    tags: ['email', 'composio', 'gmail'],
+  },
+  {
+    id: 'image-generation', phase: 5, status: 'planned',
+    name: 'Image Generation',
+    summary: 'Generate images via Claude or DALL-E. Delivered to Telegram.',
+    desc: 'Bot generates image from description, saves to temp file, sends via Telegram sendPhoto. Could also analyze images you send. "Draw a diagram of...", "create a logo for...".',
+    detail: 'Claude 3.7 now supports image output. DALL-E is accessible via OpenAI key. The bot already uses Vercel AI SDK, so adding image output is a natural extension. Telegram sendPhoto handles delivery.',
+    files: [],
+    tags: ['images', 'claude', 'generation'],
+  },
+
+  // ─── Phase 5 ───────────────────────────────────
+  {
+    id: 'mcp-protocol', phase: 6, status: 'planned',
+    name: 'MCP Protocol',
+    summary: 'Model Context Protocol. Unlimited tool connections via community MCP servers.',
+    desc: 'Connect any MCP server to the bot. Community-built MCP servers exist for databases, filesystems, APIs, and more. Standardized protocol — one integration pattern for everything.',
+    detail: 'MCP (Anthropic\'s open standard) decouples the bot from specific tool integrations. Instead of coding a GitHub integration, connect the community GitHub MCP server. The ecosystem is growing fast.',
+    files: [],
+    tags: ['mcp', 'protocol', 'tools'],
+  },
+  {
+    id: 'google-workspace', phase: 6, status: 'planned',
+    name: 'Google Workspace',
+    summary: 'Gmail, Calendar, Docs, Sheets — all from Telegram.',
+    desc: 'Via Composio or direct Google API. Create calendar events, read/write Docs, update Sheets, manage Gmail. "Add team meeting Friday 2pm" → Calendar event.',
+    detail: 'Google Workspace is where most personal productivity lives. Connecting the bot to Calendar alone unlocks scheduling automation. Composio handles the OAuth complexity.',
+    files: [],
+    tags: ['google', 'calendar', 'productivity'],
+  },
+  {
+    id: 'github-integration', phase: 6, status: 'planned',
+    name: 'GitHub Integration',
+    summary: 'Manage issues, review PRs, trigger CI from Telegram.',
+    desc: 'Via Composio or GitHub API. Create/close issues, comment on PRs, view CI status, trigger workflows. "Create issue: fix login bug" → GitHub issue.',
+    detail: 'As a developer, GitHub integration might be the highest-ROI Phase 5 feature. "What\'s blocking the antidote/peterbot milestone?" becomes a real question the bot can answer.',
+    files: [],
+    tags: ['github', 'devops', 'automation'],
+  },
+  {
+    id: 'workspace-isolation', phase: 6, status: 'planned',
+    name: 'Workspace Isolation',
+    summary: 'Separate memory, soul, config per project. Switch from Telegram.',
+    desc: 'Each workspace has its own soul.md, memory.md, and job history. Switch with "/workspace switch client-acme". Useful for keeping work projects separate or client confidentiality.',
+    detail: 'The bot goes from "your assistant" to "your assistant that knows the difference between your day job and your side projects". SQLite workspaces table, workspace_id FK on jobs.',
+    files: [],
+    tags: ['workspaces', 'isolation', 'multi-context'],
+  },
+
+  // ─── Ejection Points ───────────────────────────
+  {
+    id: 'multi-user', phase: 7, status: 'planned',
+    name: 'Multi-user',
+    summary: 'Remove hardcoded TELEGRAM_CHAT_ID. Add users table.',
+    desc: 'Replace the single TELEGRAM_CHAT_ID constant with a users table. Each user gets their own job queue, memory, and workspace. Dashboard becomes multi-tenant.',
+    detail: 'Designed-in ejection point: the single-user assumption is in one place (config.ts). When you\'re ready, add a users table and route jobs per user. Zero architectural debt.',
+    files: ['src/shared/config.ts'],
+    tags: ['scaling', 'multi-tenant', 'users'],
+  },
+  {
+    id: 'ai-intent', phase: 7, status: 'planned',
+    name: 'AI Intent Detection',
+    summary: 'Replace heuristics with Claude for smarter message routing.',
+    desc: 'Current heuristic misclassifies ambiguous messages. Replacement: small Claude call classifies message as quick | task | schedule | question. ~200ms extra latency, much better accuracy.',
+    detail: 'The current heuristic is "good enough" for clear cases. Ambiguous messages like "what should I do next with the dashboard?" confuse it. AI classification handles nuance better.',
+    files: ['src/core/telegram/intent.ts'],
+    tags: ['ai', 'routing', 'improvement'],
+  },
+  {
+    id: 'vector-memory', phase: 7, status: 'planned',
+    name: 'Vector Memory',
+    summary: 'Graduate from flat memory.md to semantic vector database.',
+    desc: 'Current: full memory.md read every job (grows unboundedly). Replacement: embed memory chunks, retrieve top-K by semantic similarity to the current task. Enables much larger memory.',
+    detail: 'The memory.md approach works up to a few KB. Past that, the context gets bloated and expensive. Vector retrieval pulls only what\'s relevant — the right facts for each specific task.',
+    files: ['memory.md'],
+    tags: ['vector', 'semantic', 'scaling'],
+  },
+  {
+    id: 'agent-coordination', phase: 7, status: 'planned',
+    name: 'Agent Coordination',
+    summary: 'Multi-agent protocol: your agent negotiates with other agents.',
+    desc: 'Long-term vision: personal agents negotiate with room agents, teammates, public services. Decentralized discovery → handshake → negotiation → settlement. Three trust tiers.',
+    detail: 'From docs/2026-02-19-agent-coordination-vision.md. Your agent could autonomously book rooms, coordinate with colleagues\' agents, negotiate API rate limits. Coordination-only data; content stays private.',
+    files: ['docs/2026-02-19-agent-coordination-vision.md'],
+    tags: ['agents', 'protocol', 'future'],
+  },
+];
+
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+
+const state = {
+  selected: null,
+  filter: 'all', // 'all' | 'done' | 'planned'
+};
+
+// ═══════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════
+
+function phaseFeatures(phaseId) {
+  return FEATURES.filter(f => f.phase === phaseId);
+}
+
+function getPhase(id) { return PHASES.find(p => p.id === id); }
+function getFeature(id) { return FEATURES.find(f => f.id === id); }
+
+function countDone(phaseId) {
+  return FEATURES.filter(f => f.phase === phaseId && f.status === 'done').length;
+}
+
+function isVisible(feature) {
+  if (state.filter === 'all') return true;
+  return feature.status === state.filter;
+}
+
+// ═══════════════════════════════════════════════
+// RENDER ROADMAP
+// ═══════════════════════════════════════════════
+
+function renderRoadmap() {
+  const roadmap = document.getElementById('roadmap');
+  roadmap.innerHTML = '';
+
+  PHASES.forEach(phase => {
+    const features = phaseFeatures(phase.id);
+    if (!features.length) return;
+
+    const done = countDone(phase.id);
+    const total = features.length;
+    const allPlanned = done === 0;
+
+    const phaseEl = document.createElement('div');
+    phaseEl.className = 'phase';
+    phaseEl.id = `phase-${phase.id}`;
+
+    phaseEl.innerHTML = `
+      <div class="phase-header">
+        <span class="phase-badge" style="
+          background: ${phase.color}18;
+          color: ${phase.color};
+          border: 1px solid ${phase.color}35;
+        ">${phase.label}</span>
+        <span class="phase-title" style="color: ${phase.done ? phase.color : 'var(--text)'}">
+          ${phase.title}
+        </span>
+        <span class="phase-desc">— ${phase.desc}</span>
+        <div class="phase-divider"></div>
+        <span class="phase-tally" style="color: ${phase.done ? phase.color : 'var(--text-dim)'}">
+          ${phase.done ? `✓ complete` : allPlanned ? `◌ ${total} planned` : `${done}/${total}`}
+        </span>
+      </div>
+      <div class="phase-cards" id="cards-${phase.id}"></div>
+    `;
+
+    roadmap.appendChild(phaseEl);
+
+    const container = phaseEl.querySelector(`#cards-${phase.id}`);
+    features.forEach(f => {
+      const el = createCard(f, phase);
+      container.appendChild(el);
+    });
+  });
+}
+
+function createCard(feature, phase) {
+  const card = document.createElement('div');
+  card.className = `card ${feature.status}${!isVisible(feature) ? ' hidden' : ''}${state.selected === feature.id ? ' selected' : ''}`;
+  card.style.setProperty('--phase-color', phase.color);
+  card.id = `card-${feature.id}`;
+
+  card.innerHTML = `
+    <div class="card-dot"></div>
+    <div class="card-name">${feature.name}</div>
+    <div class="card-summary">${feature.summary}</div>
+    <div class="card-tags">
+      ${feature.tags.slice(0, 3).map(t => `<span class="ctag">${t}</span>`).join('')}
+    </div>
+  `;
+
+  card.addEventListener('click', () => {
+    state.selected = feature.id;
+    updateSelection();
+    renderDetailPanel();
+    renderPrompt();
+  });
+
+  return card;
+}
+
+function updateSelection() {
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+  const el = document.getElementById(`card-${state.selected}`);
+  if (el) el.classList.add('selected');
+}
+
+// ═══════════════════════════════════════════════
+// FILTER
+// ═══════════════════════════════════════════════
+
+function setFilter(filter, btn) {
+  state.filter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  document.querySelectorAll('.card').forEach(card => {
+    const id = card.id.replace('card-', '');
+    const feature = getFeature(id);
+    if (!feature) return;
+    card.classList.toggle('hidden', !isVisible(feature));
+  });
+}
+
+// ═══════════════════════════════════════════════
+// DETAIL PANEL
+// ═══════════════════════════════════════════════
+
+function renderDetailPanel() {
+  const panel = document.getElementById('detailPanel');
+
+  if (!state.selected) {
+    panel.innerHTML = `
+      <div class="detail-empty">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        Click any feature card<br>to explore details &amp; get<br>a ready-to-use prompt
+      </div>
+    `;
+    return;
+  }
+
+  const f = getFeature(state.selected);
+  const phase = getPhase(f.phase);
+
+  panel.innerHTML = `
+    <div class="detail-content">
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <span class="detail-phase-tag" style="
+          background: ${phase.color}18;
+          color: ${phase.color};
+          border: 1px solid ${phase.color}35;
+        ">${phase.label} · ${phase.title}</span>
+        <div class="detail-name">${f.name}</div>
+        <span class="status-pill ${f.status}">
+          ${f.status === 'done' ? '✓ Implemented' : '◌ Planned'}
+        </span>
+      </div>
+
+      <div class="dsec">
+        <div class="dsec-label">What it does</div>
+        <div class="dsec-text">${f.desc}</div>
+      </div>
+
+      <div class="dsec">
+        <div class="dsec-label">Design notes</div>
+        <div class="dsec-text">${f.detail}</div>
+      </div>
+
+      ${f.files.length ? `
+        <div class="dsec">
+          <div class="dsec-label">Key files</div>
+          <div class="file-list">
+            ${f.files.map(p => `<div class="file-chip">${p}</div>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      <div class="dsec">
+        <div class="dsec-label">Tags</div>
+        <div class="tag-list">
+          ${f.tags.map(t => `<span class="dtag">${t}</span>`).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════
+// PROMPT GENERATION
+// ═══════════════════════════════════════════════
+
+function buildPrompt(f) {
+  const phase = getPhase(f.phase);
+  const filesNote = f.files.length
+    ? ` Relevant files: ${f.files.join(', ')}.`
+    : '';
+
+  if (f.status === 'done') {
+    return `Explain how "${f.name}" works in peterbot. ${f.desc} ${f.detail}${filesNote} Walk me through the code and the key design decisions.`;
+  } else {
+    return `I want to implement "${f.name}" in peterbot (${phase.label}: ${phase.title}). Goal: ${f.desc} Design intent: ${f.detail} What's the best approach? What files do I create or modify? Give me a step-by-step implementation plan.`;
+  }
+}
+
+function renderPrompt() {
+  const promptText = document.getElementById('promptText');
+  const copyBtn = document.getElementById('copyBtn');
+
+  if (!state.selected) {
+    promptText.textContent = 'Select a feature above to generate a focused prompt.';
+    copyBtn.disabled = true;
+    return;
+  }
+
+  promptText.textContent = buildPrompt(getFeature(state.selected));
+  copyBtn.disabled = false;
+}
+
+function copyPrompt() {
+  if (!state.selected) return;
+  const btn = document.getElementById('copyBtn');
+  navigator.clipboard.writeText(buildPrompt(getFeature(state.selected))).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// ═══════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════
+
+renderRoadmap();
+renderDetailPanel();
+renderPrompt();
+</script>
+</body>
+</html>
