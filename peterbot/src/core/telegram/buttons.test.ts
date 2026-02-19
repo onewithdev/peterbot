@@ -141,6 +141,23 @@ describe("buildInlineKeyboard", () => {
     expect(keyboard.inline_keyboard[0]).toHaveLength(2);
   });
 
+  test("creates InlineKeyboard with buttons in single row", () => {
+    const buttons = [
+      { label: "Button 1", callbackData: "action1" },
+      { label: "Button 2", callbackData: "action2" },
+      { label: "Button 3", callbackData: "action3" },
+    ];
+
+    const keyboard = buildInlineKeyboard(buttons);
+
+    // Should be 1 row with 3 buttons, not 3 rows
+    expect(keyboard.inline_keyboard).toHaveLength(1);
+    expect(keyboard.inline_keyboard[0]).toHaveLength(3);
+    expect(keyboard.inline_keyboard[0][0].text).toBe("Button 1");
+    expect(keyboard.inline_keyboard[0][1].text).toBe("Button 2");
+    expect(keyboard.inline_keyboard[0][2].text).toBe("Button 3");
+  });
+
   test("empty buttons array creates keyboard with empty row", () => {
     const keyboard = buildInlineKeyboard([]);
     expect(keyboard.inline_keyboard).toHaveLength(1);
