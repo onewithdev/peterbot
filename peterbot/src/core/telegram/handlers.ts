@@ -26,6 +26,12 @@ import { findSimilarSolutions } from "../../features/solutions/similarity";
 import { autoTagSolution, buildKeywords } from "../../features/solutions/service";
 import { createSolution, getAllSolutions } from "../../features/solutions/repository";
 import type { Solution } from "../../features/solutions/schema";
+import {
+  getButtonsForContext,
+  buildInlineKeyboard,
+  parseCallbackData,
+  isCallbackExpired,
+} from "./buttons.js";
 
 /**
  * Format an acknowledgment reply for a newly created task job.
@@ -91,6 +97,32 @@ export function formatScheduleCreated(
 }
 
 /**
+ * Format the help message with all available commands.
+ * Grouped by category: Core, Scheduling, and Solutions.
+ *
+ * @returns Formatted help message in Markdown
+ */
+export function formatHelpMessage(): string {
+  return (
+    `*📖 peterbot Commands*\n\n` +
+    `*Core Commands*\n` +
+    `\`/start\` — Welcome message\n` +
+    `\`/help\` — Show this help\n` +
+    `\`/status\` — List all your tasks\n` +
+    `\`/retry [jobId]\` — Retry a failed job\n` +
+    `\`/get [jobId]\` — Get completed job output\n\n` +
+    `*Scheduling*\n` +
+    `\`/schedule <when> "<what>"\` — Create recurring task\n` +
+    `  Example: \`/schedule every monday 9am "send briefing"\`\n` +
+    `\`/schedules\` — List all schedules\n\n` +
+    `*Solutions*\n` +
+    `\`/solutions\` — List saved solutions\n` +
+    `Reply "save this solution" to a completed job\n\n` +
+    `Send any task without \`/\` to get started!`
+  );
+}
+
+/**
  * Format a list of schedules.
  *
  * @param schedules - Array of schedules to format
@@ -125,7 +157,8 @@ export function formatSchedulesList(schedules: Schedule[]): string {
 
 type PendingAction =
   | { type: "suggestion"; originalInput: string; solution: Solution }
-  | { type: "save"; jobs: Job[] };
+  | { type: "save"; jobs: Job[] }
+  | { type: "schedule"; jobId: string; input: string };
 
 const pendingActions = new Map<string, PendingAction>();
 
@@ -217,13 +250,20 @@ export function setupHandlers(bot: Bot): void {
 
   // Command: /start
   bot.command("start", async (ctx) => {
+    const buttons = getButtonsForContext("start");
+    const keyboard = buildInlineKeyboard(buttons);
     await ctx.reply(
       `👋 Hi! I'm peterbot.
 
 Send me a task and I'll work on it in the background.
 Use /status to see what I'm working on.`,
-      { parse_mode: "Markdown" }
+      { parse_mode: "Markdown", reply_markup: keyboard }
     );
+  });
+
+  // Command: /help
+  bot.command("help", async (ctx) => {
+    await ctx.reply(formatHelpMessage(), { parse_mode: "Markdown" });
   });
 
   // Command: /status
@@ -588,6 +628,61 @@ Use /status to see what I'm working on.`,
         pendingActions.delete(chatId);
         // Continue to normal flow below
       }
+
+      if (pending.type === "schedule") {
+        // Handle schedule timing input
+        const when = text.trim();
+
+        try {
+          // Parse the natural language schedule
+          const parsed = await parseNaturalSchedule(when);
+
+          if (parsed.confidence < 0.5) {
+            await ctx.reply(
+              `❌ Could not understand the schedule.\n\n` +
+                `Try formats like:\n` +
+                `• every Monday at 9am\n` +
+                `• every weekday at 8:30am\n` +
+                `• every day at midnight\n\n` +
+                `Or reply "cancel" to abort.`,
+              { parse_mode: "Markdown" }
+            );
+            return;
+          }
+
+          // Calculate next run time
+          const nextRunAt = calculateNextRun(parsed.cron);
+
+          // Create the schedule
+          const schedule = await createSchedule(db, {
+            description: parsed.description,
+            naturalSchedule: when,
+            parsedCron: parsed.cron,
+            prompt: pending.input,
+            enabled: true,
+            nextRunAt,
+          });
+
+          pendingActions.delete(chatId);
+
+          const buttons = getButtonsForContext("schedule_created");
+          const keyboard = buildInlineKeyboard(buttons);
+
+          await ctx.reply(formatScheduleCreated(schedule, parsed.description), {
+            parse_mode: "Markdown",
+            reply_markup: keyboard,
+          });
+          return;
+        } catch (error) {
+          console.error("Error creating schedule:", error);
+          pendingActions.delete(chatId);
+          await ctx.reply(
+            "Sorry, I encountered an error while creating the schedule. Please try again.",
+            { parse_mode: "Markdown" }
+          );
+          return;
+        }
+      }
     }
 
     // Check for save intent
@@ -655,6 +750,170 @@ Use /status to see what I'm working on.`,
       });
 
       await ctx.reply(formatAckReply(job.id), { parse_mode: "Markdown" });
+    }
+  });
+
+  // Callback query handler for inline keyboard buttons
+  bot.on("callback_query:data", async (ctx) => {
+    const chatId = ctx.chat?.id?.toString();
+    if (!chatId) return;
+
+    // Check if callback is expired (5-minute window)
+    const messageDate = ctx.callbackQuery.message?.date;
+    if (messageDate && isCallbackExpired(messageDate)) {
+      await ctx.answerCallbackQuery({
+        text: "This button has expired. Please use commands instead.",
+        show_alert: true,
+      });
+      return;
+    }
+
+    const data = ctx.callbackQuery.data;
+    const { action, jobIdPrefix } = parseCallbackData(data);
+
+    switch (action) {
+      case "help": {
+        await ctx.answerCallbackQuery();
+        await ctx.reply(formatHelpMessage(), { parse_mode: "Markdown" });
+        break;
+      }
+
+      case "schedules": {
+        await ctx.answerCallbackQuery();
+        const schedules = await getAllSchedules(db);
+        await ctx.reply(formatSchedulesList(schedules), { parse_mode: "Markdown" });
+        break;
+      }
+
+      case "solutions": {
+        await ctx.answerCallbackQuery();
+        const solutions = await getAllSolutions(db);
+        await ctx.reply(formatSolutionsList(solutions), { parse_mode: "Markdown" });
+        break;
+      }
+
+      case "save": {
+        await ctx.answerCallbackQuery();
+        if (!jobIdPrefix) {
+          await ctx.reply("Error: No job ID provided.", { parse_mode: "Markdown" });
+          return;
+        }
+
+        // Get completed jobs for this chat
+        const allJobs = await getJobsByChatId(db, chatId);
+        const job = allJobs.find((j) => j.id.startsWith(jobIdPrefix));
+
+        if (!job) {
+          await ctx.reply(`Job \`${jobIdPrefix}\` not found.`, { parse_mode: "Markdown" });
+          return;
+        }
+
+        if (job.status !== "completed") {
+          await ctx.reply(
+            `Job \`${jobIdPrefix}\` is not completed yet (status: ${job.status}).`,
+            { parse_mode: "Markdown" }
+          );
+          return;
+        }
+
+        try {
+          const tagged = await autoTagSolution(job.input, job.output || "");
+          const keywords = buildKeywords(job.input + " " + (job.output || ""));
+
+          await createSolution(db, {
+            jobId: job.id,
+            title: tagged.title,
+            description: tagged.description,
+            tags: JSON.stringify(tagged.tags),
+            keywords,
+          });
+
+          await ctx.reply(formatSolutionSaved(tagged.title, tagged.tags), {
+            parse_mode: "Markdown",
+          });
+        } catch (error) {
+          console.error("Error saving solution:", error);
+          await ctx.reply(
+            "Sorry, I encountered an error while saving the solution. Please try again.",
+            { parse_mode: "Markdown" }
+          );
+        }
+        break;
+      }
+
+      case "schedule": {
+        await ctx.answerCallbackQuery();
+        if (!jobIdPrefix) {
+          await ctx.reply("Error: No job ID provided.", { parse_mode: "Markdown" });
+          return;
+        }
+
+        // Get the job to use its input as the schedule prompt
+        const allJobs = await getJobsByChatId(db, chatId);
+        const job = allJobs.find((j) => j.id.startsWith(jobIdPrefix));
+
+        if (!job) {
+          await ctx.reply(`Job \`${jobIdPrefix}\` not found.`, { parse_mode: "Markdown" });
+          return;
+        }
+
+        // Store pending schedule action with job input
+        pendingActions.set(chatId, {
+          type: "schedule",
+          jobId: job.id,
+          input: job.input,
+        });
+
+        await ctx.reply(
+          `📅 *Schedule this task*\n\n` +
+            `Job: \`${jobIdPrefix}\`\n` +
+            `Task: ${job.input.slice(0, 50)}${job.input.length > 50 ? "..." : ""}\n\n` +
+            `Please reply with when to run this (e.g., "every monday 9am", "daily at 8am"):`,
+          { parse_mode: "Markdown" }
+        );
+        break;
+      }
+
+      case "retry": {
+        await ctx.answerCallbackQuery();
+        if (!jobIdPrefix) {
+          await ctx.reply("Error: No job ID provided.", { parse_mode: "Markdown" });
+          return;
+        }
+
+        const jobs = await getJobsByChatId(db, chatId);
+        const job = jobs.find((j) => j.id.startsWith(jobIdPrefix));
+
+        if (!job) {
+          await ctx.reply(`Job \`${jobIdPrefix}\` not found.`, { parse_mode: "Markdown" });
+          return;
+        }
+
+        if (job.status !== "failed") {
+          await ctx.reply(
+            `Job \`${jobIdPrefix}\` is not failed (status: ${job.status}). Only failed jobs can be retried.`,
+            { parse_mode: "Markdown" }
+          );
+          return;
+        }
+
+        // Create new job with same input
+        const newJob = await createJob(db, {
+          type: "task",
+          input: job.input,
+          chatId,
+        });
+
+        await ctx.reply(formatAckReply(newJob.id), { parse_mode: "Markdown" });
+        break;
+      }
+
+      default: {
+        await ctx.answerCallbackQuery({
+          text: "Unknown action.",
+          show_alert: true,
+        });
+      }
     }
   });
 }

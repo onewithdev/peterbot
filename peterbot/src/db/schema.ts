@@ -12,6 +12,9 @@ export * from "../features/compaction/schema";
 // Solutions feature
 export * from "../features/solutions/schema";
 
+// Chat feature
+export * from "../features/chat/schema";
+
 // Future feature slices (placeholders):
 // export * from "../features/memory/schema";
 // export * from "../features/users/schema";

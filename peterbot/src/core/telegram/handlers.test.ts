@@ -11,6 +11,7 @@ import {
   formatAckReply,
   formatQuickReply,
   formatStatusReply,
+  formatHelpMessage,
 } from "./handlers";
 import type { Job } from "../../features/jobs/schema";
 import { detectIntent, TASK_KEYWORDS } from "./intent";
@@ -100,6 +101,44 @@ describe("formatQuickReply", () => {
   test("should handle multi-line text", () => {
     const text = "Line 1\nLine 2\nLine 3";
     expect(formatQuickReply(text)).toBe(text);
+  });
+});
+
+describe("formatHelpMessage", () => {
+  test("should include Core commands section", () => {
+    const result = formatHelpMessage();
+    expect(result).toContain("Core Commands");
+    expect(result).toContain("/start");
+    expect(result).toContain("/status");
+    expect(result).toContain("/retry");
+    expect(result).toContain("/get");
+  });
+
+  test("should include Scheduling section", () => {
+    const result = formatHelpMessage();
+    expect(result).toContain("Scheduling");
+    expect(result).toContain("/schedule");
+    expect(result).toContain("/schedules");
+  });
+
+  test("should include Solutions section", () => {
+    const result = formatHelpMessage();
+    expect(result).toContain("Solutions");
+    expect(result).toContain("/solutions");
+    expect(result).toContain("save this solution");
+  });
+
+  test("should format command names with backticks", () => {
+    const result = formatHelpMessage();
+    expect(result).toContain("`/start`");
+    expect(result).toContain("`/help`");
+    expect(result).toContain("`/status`");
+  });
+
+  test("should include example for schedule command", () => {
+    const result = formatHelpMessage();
+    expect(result).toContain("every monday 9am");
+    expect(result).toContain("send briefing");
   });
 });
 

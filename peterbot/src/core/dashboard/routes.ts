@@ -48,6 +48,7 @@ import {
   deleteSolution,
   getSolutionById,
 } from "../../features/solutions/repository.js";
+import { chatRoutes } from "./chat-routes.js";
 import {
   parseNaturalSchedule,
   calculateNextRun,
@@ -694,7 +695,13 @@ const app = new Hono()
       await deleteSolution(undefined, id);
       return c.json({ success: true });
     }
-  );
+  )
+
+  // ==========================================================================
+  // Chat API (Protected)
+  // ==========================================================================
+
+  .route("/chat", chatRoutes);
 
 // ============================================================================
 // Exports

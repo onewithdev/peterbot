@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach, mock } from "bun:test";
 import { dashboardApp } from "./routes";
 
 // Store original env
@@ -118,6 +118,122 @@ describe("Dashboard API - Jobs", () => {
       const res = await dashboardApp.request("/jobs/not-a-uuid/cancel", {
         method: "POST",
         headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
+      });
+
+      expect(res.status).toBe(400);
+    });
+  });
+});
+
+const repoMocks = {
+  getMessages: async () => [],
+  getMessagesSince: async () => [],
+  getMessagesBefore: async () => [],
+  saveMessage: async () => ({ id: "msg_123", createdAt: new Date() }),
+};
+
+describe("Dashboard API - Chat", () => {
+  beforeAll(() => {
+    process.env.DASHBOARD_PASSWORD = "test_dashboard_password";
+    process.env.TELEGRAM_CHAT_ID = "test_chat_123";
+
+    // Mock the chat repository module
+    mock.module("../../features/chat/repository.js", () => repoMocks);
+  });
+
+  afterAll(() => {
+    // Restore the original module
+    mock.restore();
+  });
+
+  describe("GET /chat/messages", () => {
+    test("returns 401 without auth header", async () => {
+      const res = await dashboardApp.request("/chat/messages");
+      expect(res.status).toBe(401);
+    });
+
+    test("with valid auth returns messages array", async () => {
+      const res = await dashboardApp.request("/chat/messages", {
+        headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body.messages)).toBe(true);
+    });
+
+    test("passes since param through", async () => {
+      const since = Date.now() - 3600000; // 1 hour ago
+
+      const res = await dashboardApp.request(`/chat/messages?since=${since}`, {
+        headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body.messages)).toBe(true);
+    });
+
+    test("passes before param through", async () => {
+      const before = Date.now();
+
+      const res = await dashboardApp.request(`/chat/messages?before=${before}`, {
+        headers: { [PASSWORD_HEADER]: "test_dashboard_password" },
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body.messages)).toBe(true);
+    });
+  });
+
+  describe("POST /chat/send", () => {
+    test("returns 401 without auth header", async () => {
+      const res = await dashboardApp.request("/chat/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "Hello" }),
+      });
+      expect(res.status).toBe(401);
+    });
+
+    test("with valid auth returns { messageId, createdAt }", async () => {
+      const res = await dashboardApp.request("/chat/send", {
+        method: "POST",
+        headers: {
+          [PASSWORD_HEADER]: "test_dashboard_password",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: "Hello from dashboard" }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.messageId).toBeString();
+      expect(typeof body.createdAt).toBe("number");
+    });
+
+    test("with missing content returns 400", async () => {
+      const res = await dashboardApp.request("/chat/send", {
+        method: "POST",
+        headers: {
+          [PASSWORD_HEADER]: "test_dashboard_password",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    test("with empty content returns 400", async () => {
+      const res = await dashboardApp.request("/chat/send", {
+        method: "POST",
+        headers: {
+          [PASSWORD_HEADER]: "test_dashboard_password",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: "" }),
       });
 
       expect(res.status).toBe(400);

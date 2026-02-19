@@ -51,6 +51,10 @@ import {
   seedDefaultConfig,
 } from "../features/compaction/repository.js";
 import { checkAndCompact } from "../features/compaction/service.js";
+import {
+  getButtonsForContext,
+  buildInlineKeyboard,
+} from "../core/telegram/buttons.js";
 
 // Force early validation of required config (throws if missing)
 config.googleApiKey;
@@ -229,6 +233,7 @@ function truncateForTelegram(text: string, header: string): string {
  * Sends a success message with the result and marks the job as delivered.
  * Handles message length limits and delivery errors.
  * Prepends schedule label if the job was created by a schedule.
+ * Includes inline keyboard buttons for task_completed context.
  *
  * @param job - The completed job
  * @param result - The result text to deliver
@@ -254,8 +259,14 @@ async function deliverResult(job: Job, result: string): Promise<void> {
   // Truncate result to fit within Telegram's message limit
   const truncatedResult = truncateForTelegram(result, header);
 
+  // Build inline keyboard for task_completed context
+  const buttons = getButtonsForContext("task_completed", { jobIdPrefix: shortId });
+  const keyboard = buildInlineKeyboard(buttons);
+
   try {
-    await bot.api.sendMessage(job.chatId, header + truncatedResult);
+    await bot.api.sendMessage(job.chatId, header + truncatedResult, {
+      reply_markup: keyboard,
+    });
 
     await markJobDelivered(db, job.id);
     console.log(`[Worker] Delivered result for job ${shortId}`);
