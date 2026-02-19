@@ -32,6 +32,21 @@ import {
   parseCallbackData,
   isCallbackExpired,
 } from "./buttons.js";
+import { saveMessage } from "../../features/chat/repository.js";
+
+/**
+ * Safely save a message to the database without throwing.
+ * Logs errors but never blocks bot replies.
+ */
+async function safeSaveMessage(
+  message: Parameters<typeof saveMessage>[1]
+): Promise<void> {
+  try {
+    await saveMessage(undefined, message);
+  } catch (error) {
+    console.error("Failed to save message:", error);
+  }
+}
 
 /**
  * Format an acknowledgment reply for a newly created task job.
@@ -251,40 +266,109 @@ export function setupHandlers(bot: Bot): void {
 
   // Command: /start
   bot.command("start", async (ctx) => {
+    const chatId = ctx.chat.id.toString();
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: "/start",
+      sender: "user",
+    }).catch(() => {});
+
     const buttons = getButtonsForContext("start");
     const keyboard = buildInlineKeyboard(buttons);
-    await ctx.reply(
-      `👋 Hi! I'm peterbot.
+    const response = `👋 Hi! I'm peterbot.
 
 Send me a task and I'll work on it in the background.
-Use /status to see what I'm working on.`,
-      { parse_mode: "Markdown", reply_markup: keyboard }
-    );
+Use /status to see what I'm working on.`;
+
+    await ctx.reply(response, { parse_mode: "Markdown", reply_markup: keyboard });
+
+    // Save bot response (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "out",
+      content: response,
+      sender: "bot",
+    }).catch(() => {});
   });
 
   // Command: /help
   bot.command("help", async (ctx) => {
-    await ctx.reply(formatHelpMessage(), { parse_mode: "Markdown" });
+    const chatId = ctx.chat.id.toString();
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: "/help",
+      sender: "user",
+    }).catch(() => {});
+
+    const response = formatHelpMessage();
+    await ctx.reply(response, { parse_mode: "Markdown" });
+
+    // Save bot response (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "out",
+      content: response,
+      sender: "bot",
+    }).catch(() => {});
   });
 
   // Command: /status
   bot.command("status", async (ctx) => {
     const chatId = ctx.chat.id.toString();
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: "/status",
+      sender: "user",
+    }).catch(() => {});
+
     const allJobs = await getJobsByChatId(db, chatId);
-    await ctx.reply(formatStatusReply(allJobs));
+    const response = formatStatusReply(allJobs);
+    await ctx.reply(response);
+
+    // Save bot response (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "out",
+      content: response,
+      sender: "bot",
+    }).catch(() => {});
   });
 
   // Command: /retry [jobId]
   bot.command("retry", async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const text = ctx.message?.text || "";
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: text,
+      sender: "user",
+    }).catch(() => {});
+
     const parts = text.split(" ");
 
     if (parts.length < 2) {
-      await ctx.reply(
-        "Please provide a job ID. Usage: `/retry [jobId]`",
-        { parse_mode: "Markdown" }
-      );
+      const response = "Please provide a job ID. Usage: `/retry [jobId]`";
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
@@ -292,10 +376,16 @@ Use /status to see what I'm working on.`,
 
     // Validate job ID format (8 chars or full UUID)
     if (jobId.length !== 8 && jobId.length !== 36) {
-      await ctx.reply(
-        "Invalid job ID format. Use the first 8 characters or the full ID.",
-        { parse_mode: "Markdown" }
-      );
+      const response = "Invalid job ID format. Use the first 8 characters or the full ID.";
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
@@ -305,10 +395,16 @@ Use /status to see what I'm working on.`,
       const matchingJob = jobs.find((j) => j.id.startsWith(jobId));
 
       if (!matchingJob) {
-        await ctx.reply(
-          `Job \`${jobId}\` not found.`,
-          { parse_mode: "Markdown" }
-        );
+        const response = `Job \`${jobId}\` not found.`;
+        await ctx.reply(response, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: response,
+          sender: "bot",
+        }).catch(() => {});
         return;
       }
 
@@ -319,18 +415,30 @@ Use /status to see what I'm working on.`,
     const job = await getJobById(db, jobId);
 
     if (!job) {
-      await ctx.reply(
-        `Job \`${jobId.slice(0, 8)}\` not found.`,
-        { parse_mode: "Markdown" }
-      );
+      const response = `Job \`${jobId.slice(0, 8)}\` not found.`;
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
     if (job.status !== "failed") {
-      await ctx.reply(
-        `Job \`${jobId.slice(0, 8)}\` is not failed (status: ${job.status}). Only failed jobs can be retried.`,
-        { parse_mode: "Markdown" }
-      );
+      const response = `Job \`${jobId.slice(0, 8)}\` is not failed (status: ${job.status}). Only failed jobs can be retried.`;
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
@@ -341,20 +449,45 @@ Use /status to see what I'm working on.`,
       chatId,
     });
 
-    await ctx.reply(formatAckReply(newJob.id), { parse_mode: "Markdown" });
+    const response = formatAckReply(newJob.id);
+    await ctx.reply(response, { parse_mode: "Markdown" });
+
+    // Save bot response (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "out",
+      content: response,
+      sender: "bot",
+      jobId: newJob.id,
+    }).catch(() => {});
   });
 
   // Command: /get [jobId]
   bot.command("get", async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const text = ctx.message?.text || "";
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: text,
+      sender: "user",
+    }).catch(() => {});
+
     const parts = text.split(" ");
 
     if (parts.length < 2) {
-      await ctx.reply(
-        "Please provide a job ID. Usage: `/get [jobId]`",
-        { parse_mode: "Markdown" }
-      );
+      const response = "Please provide a job ID. Usage: `/get [jobId]`";
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response
+      await saveMessage(undefined, {
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      });
       return;
     }
 
@@ -362,10 +495,16 @@ Use /status to see what I'm working on.`,
 
     // Validate job ID format (8 chars or full UUID)
     if (jobId.length !== 8 && jobId.length !== 36) {
-      await ctx.reply(
-        "Invalid job ID format. Use the first 8 characters or the full ID.",
-        { parse_mode: "Markdown" }
-      );
+      const response = "Invalid job ID format. Use the first 8 characters or the full ID.";
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
@@ -375,10 +514,16 @@ Use /status to see what I'm working on.`,
       const matchingJob = jobs.find((j) => j.id.startsWith(jobId));
 
       if (!matchingJob) {
-        await ctx.reply(
-          `Job \`${jobId}\` not found.`,
-          { parse_mode: "Markdown" }
-        );
+        const response = `Job \`${jobId}\` not found.`;
+        await ctx.reply(response, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: response,
+          sender: "bot",
+        }).catch(() => {});
         return;
       }
 
@@ -389,18 +534,30 @@ Use /status to see what I'm working on.`,
     const job = await getJobById(db, jobId);
 
     if (!job) {
-      await ctx.reply(
-        `Job \`${jobId.slice(0, 8)}\` not found.`,
-        { parse_mode: "Markdown" }
-      );
+      const response = `Job \`${jobId.slice(0, 8)}\` not found.`;
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
     if (job.status !== "completed") {
-      await ctx.reply(
-        `Job \`${jobId.slice(0, 8)}\` is not completed yet (status: ${job.status}).`,
-        { parse_mode: "Markdown" }
-      );
+      const response = `Job \`${jobId.slice(0, 8)}\` is not completed yet (status: ${job.status}).`;
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
@@ -411,6 +568,14 @@ Use /status to see what I'm working on.`,
     }
 
     await ctx.reply(output);
+
+    // Save bot response (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "out",
+      content: output,
+      sender: "bot",
+    }).catch(() => {});
   });
 
   // Command: /schedule
@@ -418,16 +583,30 @@ Use /status to see what I'm working on.`,
     const text = ctx.message?.text || "";
     const chatId = ctx.chat.id.toString();
 
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: text,
+      sender: "user",
+    }).catch(() => {});
+
     // Get the text after "/schedule "
     const args = text.slice("/schedule ".length).trim();
 
     if (!args) {
-      await ctx.reply(
-        `Usage:\n` +
-          `/schedule every monday 9am "send me a briefing"\n\n` +
-          `To delete: /schedule delete <id>`,
-        { parse_mode: "Markdown" }
-      );
+      const response = `Usage:\n` +
+        `/schedule every monday 9am "send me a briefing"\n\n` +
+        `To delete: /schedule delete <id>`;
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
@@ -436,10 +615,16 @@ Use /status to see what I'm working on.`,
       const idPrefix = args.slice(7).trim();
 
       if (idPrefix.length !== 8) {
-        await ctx.reply(
-          "Please provide the first 8 characters of the schedule ID.",
-          { parse_mode: "Markdown" }
-        );
+        const response = "Please provide the first 8 characters of the schedule ID.";
+        await ctx.reply(response, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: response,
+          sender: "bot",
+        }).catch(() => {});
         return;
       }
 
@@ -448,14 +633,30 @@ Use /status to see what I'm working on.`,
       const schedule = schedules.find((s) => s.id.startsWith(idPrefix));
 
       if (!schedule) {
-        await ctx.reply("❌ Schedule not found.", { parse_mode: "Markdown" });
+        const response = "❌ Schedule not found.";
+        await ctx.reply(response, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: response,
+          sender: "bot",
+        }).catch(() => {});
         return;
       }
 
       await deleteSchedule(db, schedule.id);
-      await ctx.reply(`✅ Schedule \`${idPrefix}\` deleted.`, {
-        parse_mode: "Markdown",
-      });
+      const deleteResponse = `✅ Schedule \`${idPrefix}\` deleted.`;
+      await ctx.reply(deleteResponse, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: deleteResponse,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
@@ -463,14 +664,20 @@ Use /status to see what I'm working on.`,
     const match = args.match(/^(.+?)\s+"([^"]+)"\s*$/);
 
     if (!match) {
-      await ctx.reply(
-        `Usage: /schedule <when> "<what>"\n\n` +
-          `Examples:\n` +
-          `/schedule every monday 9am "send me a briefing"\n` +
-          `/schedule every weekday at 8:30am "check emails"\n` +
-          `/schedule every day at midnight "daily summary"`,
-        { parse_mode: "Markdown" }
-      );
+      const response = `Usage: /schedule <when> "<what>"\n\n` +
+        `Examples:\n` +
+        `/schedule every monday 9am "send me a briefing"\n` +
+        `/schedule every weekday at 8:30am "check emails"\n` +
+        `/schedule every day at midnight "daily summary"`;
+      await ctx.reply(response, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
@@ -481,14 +688,20 @@ Use /status to see what I'm working on.`,
       const parsed = await parseNaturalSchedule(when);
 
       if (parsed.confidence < 0.5) {
-        await ctx.reply(
-          `❌ Could not understand the schedule.\n\n` +
-            `Try formats like:\n` +
-            `• every Monday at 9am\n` +
-            `• every weekday at 8:30am\n` +
-            `• every day at midnight`,
-          { parse_mode: "Markdown" }
-        );
+        const response = `❌ Could not understand the schedule.\n\n` +
+          `Try formats like:\n` +
+          `• every Monday at 9am\n` +
+          `• every weekday at 8:30am\n` +
+          `• every day at midnight`;
+        await ctx.reply(response, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: response,
+          sender: "bot",
+        }).catch(() => {});
         return;
       }
 
@@ -507,30 +720,83 @@ Use /status to see what I'm working on.`,
 
       const buttons = getButtonsForContext("schedule_created");
       const keyboard = buildInlineKeyboard(buttons);
+      const response = formatScheduleCreated(schedule, parsed.description);
 
-      await ctx.reply(formatScheduleCreated(schedule, parsed.description), {
+      await ctx.reply(response, {
         parse_mode: "Markdown",
         reply_markup: keyboard,
       });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: response,
+        sender: "bot",
+      }).catch(() => {});
     } catch (error) {
       console.error("Error creating schedule:", error);
-      await ctx.reply(
-        "Sorry, I encountered an error while creating the schedule. Please try again.",
-        { parse_mode: "Markdown" }
-      );
+      const errorResponse = "Sorry, I encountered an error while creating the schedule. Please try again.";
+      await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+      // Save bot error response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: errorResponse,
+        sender: "bot",
+      }).catch(() => {});
     }
   });
 
   // Command: /schedules
   bot.command("schedules", async (ctx) => {
+    const chatId = ctx.chat.id.toString();
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: "/schedules",
+      sender: "user",
+    }).catch(() => {});
+
     const schedules = await getAllSchedules(db);
-    await ctx.reply(formatSchedulesList(schedules), { parse_mode: "Markdown" });
+    const response = formatSchedulesList(schedules);
+    await ctx.reply(response, { parse_mode: "Markdown" });
+
+    // Save bot response (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "out",
+      content: response,
+      sender: "bot",
+    }).catch(() => {});
   });
 
   // Command: /solutions
   bot.command("solutions", async (ctx) => {
+    const chatId = ctx.chat.id.toString();
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: "/solutions",
+      sender: "user",
+    }).catch(() => {});
+
     const solutions = await getAllSolutions(db);
-    await ctx.reply(formatSolutionsList(solutions), { parse_mode: "Markdown" });
+    const response = formatSolutionsList(solutions);
+    await ctx.reply(response, { parse_mode: "Markdown" });
+
+    // Save bot response (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "out",
+      content: response,
+      sender: "bot",
+    }).catch(() => {});
   });
 
   // Main message handler
@@ -542,6 +808,14 @@ Use /status to see what I'm working on.`,
     if (text.startsWith("/")) {
       return;
     }
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: text,
+      sender: "user",
+    }).catch(() => {});
 
     // Check for pending action
     const pending = pendingActions.get(chatId);
@@ -568,23 +842,48 @@ Use /status to see what I'm working on.`,
               });
 
               pendingActions.delete(chatId);
-              await ctx.reply(formatSolutionSaved(tagged.title, tagged.tags), {
+              const successResponse = formatSolutionSaved(tagged.title, tagged.tags);
+              await ctx.reply(successResponse, {
                 parse_mode: "Markdown",
               });
+
+              // Save bot response (fire-and-forget, errors logged only)
+              safeSaveMessage({
+                chatId,
+                direction: "out",
+                content: successResponse,
+                sender: "bot",
+                jobId: job.id,
+              }).catch(() => {});
             } catch (error) {
               console.error("Error saving solution:", error);
               pendingActions.delete(chatId);
-              await ctx.reply(
-                "Sorry, I encountered an error while saving the solution. Please try again.",
-                { parse_mode: "Markdown" }
-              );
+              const errorResponse = "Sorry, I encountered an error while saving the solution. Please try again.";
+              await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+              // Save bot error response (fire-and-forget, errors logged only)
+              safeSaveMessage({
+                chatId,
+                direction: "out",
+                content: errorResponse,
+                sender: "bot",
+              }).catch(() => {});
             }
             return;
           }
         }
 
         // Invalid selection, re-send the list
-        await ctx.reply(formatSaveList(pending.jobs), { parse_mode: "Markdown" });
+        const listResponse = formatSaveList(pending.jobs);
+        await ctx.reply(listResponse, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: listResponse,
+          sender: "bot",
+        }).catch(() => {});
         return;
       }
 
@@ -643,15 +942,22 @@ Use /status to see what I'm working on.`,
           const parsed = await parseNaturalSchedule(when);
 
           if (parsed.confidence < 0.5) {
-            await ctx.reply(
+            const parseErrorResponse =
               `❌ Could not understand the schedule.\n\n` +
-                `Try formats like:\n` +
-                `• every Monday at 9am\n` +
-                `• every weekday at 8:30am\n` +
-                `• every day at midnight\n\n` +
-                `Or reply "cancel" to abort.`,
-              { parse_mode: "Markdown" }
-            );
+              `Try formats like:\n` +
+              `• every Monday at 9am\n` +
+              `• every weekday at 8:30am\n` +
+              `• every day at midnight\n\n` +
+              `Or reply "cancel" to abort.`;
+            await ctx.reply(parseErrorResponse, { parse_mode: "Markdown" });
+
+            // Save bot response (fire-and-forget, errors logged only)
+            safeSaveMessage({
+              chatId,
+              direction: "out",
+              content: parseErrorResponse,
+              sender: "bot",
+            }).catch(() => {});
             return;
           }
 
@@ -672,19 +978,34 @@ Use /status to see what I'm working on.`,
 
           const buttons = getButtonsForContext("schedule_created");
           const keyboard = buildInlineKeyboard(buttons);
+          const successResponse = formatScheduleCreated(schedule, parsed.description);
 
-          await ctx.reply(formatScheduleCreated(schedule, parsed.description), {
+          await ctx.reply(successResponse, {
             parse_mode: "Markdown",
             reply_markup: keyboard,
           });
+
+          // Save bot response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: successResponse,
+            sender: "bot",
+          }).catch(() => {});
           return;
         } catch (error) {
           console.error("Error creating schedule:", error);
           pendingActions.delete(chatId);
-          await ctx.reply(
-            "Sorry, I encountered an error while creating the schedule. Please try again.",
-            { parse_mode: "Markdown" }
-          );
+          const errorResponse = "Sorry, I encountered an error while creating the schedule. Please try again.";
+          await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+          // Save bot error response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: errorResponse,
+            sender: "bot",
+          }).catch(() => {});
           return;
         }
       }
@@ -704,15 +1025,22 @@ Use /status to see what I'm working on.`,
             const parsed = await parseNaturalSchedule(when);
 
             if (parsed.confidence < 0.5) {
-              await ctx.reply(
+              const parseErrorResponse =
                 `❌ Could not understand the schedule.\n\n` +
-                  `Try formats like:\n` +
-                  `• every Monday at 9am\n` +
-                  `• every weekday at 8:30am\n` +
-                  `• every day at midnight\n\n` +
-                  `Or reply "cancel" to abort.`,
-                { parse_mode: "Markdown" }
-              );
+                `Try formats like:\n` +
+                `• every Monday at 9am\n` +
+                `• every weekday at 8:30am\n` +
+                `• every day at midnight\n\n` +
+                `Or reply "cancel" to abort.`;
+              await ctx.reply(parseErrorResponse, { parse_mode: "Markdown" });
+
+              // Save bot response (fire-and-forget, errors logged only)
+              safeSaveMessage({
+                chatId,
+                direction: "out",
+                content: parseErrorResponse,
+                sender: "bot",
+              }).catch(() => {});
               return;
             }
 
@@ -733,19 +1061,34 @@ Use /status to see what I'm working on.`,
 
             const buttons = getButtonsForContext("schedule_created");
             const keyboard = buildInlineKeyboard(buttons);
+            const successResponse = formatScheduleCreated(schedule, parsed.description);
 
-            await ctx.reply(formatScheduleCreated(schedule, parsed.description), {
+            await ctx.reply(successResponse, {
               parse_mode: "Markdown",
               reply_markup: keyboard,
             });
+
+            // Save bot response (fire-and-forget, errors logged only)
+            safeSaveMessage({
+              chatId,
+              direction: "out",
+              content: successResponse,
+              sender: "bot",
+            }).catch(() => {});
             return;
           } catch (error) {
             console.error("Error creating schedule:", error);
             pendingActions.delete(chatId);
-            await ctx.reply(
-              "Sorry, I encountered an error while creating the schedule. Please try again.",
-              { parse_mode: "Markdown" }
-            );
+            const errorResponse = "Sorry, I encountered an error while creating the schedule. Please try again.";
+            await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+            // Save bot error response (fire-and-forget, errors logged only)
+            safeSaveMessage({
+              chatId,
+              direction: "out",
+              content: errorResponse,
+              sender: "bot",
+            }).catch(() => {});
             return;
           }
         }
@@ -782,7 +1125,16 @@ Use /status to see what I'm working on.`,
         originalInput: text,
         solution: topMatch,
       });
-      await ctx.reply(formatSuggestionMessage(topMatch), { parse_mode: "Markdown" });
+      const suggestionResponse = formatSuggestionMessage(topMatch);
+      await ctx.reply(suggestionResponse, { parse_mode: "Markdown" });
+
+      // Save bot response (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: suggestionResponse,
+        sender: "bot",
+      }).catch(() => {});
       return;
     }
 
@@ -801,12 +1153,28 @@ Use /status to see what I'm working on.`,
           prompt: text,
         });
 
-        await ctx.reply(formatQuickReply(response));
+        const replyText = formatQuickReply(response);
+        await ctx.reply(replyText);
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: replyText,
+          sender: "bot",
+        }).catch(() => {});
       } catch (error) {
         console.error("Error generating quick reply:", error);
-        await ctx.reply(
-          "Sorry, I encountered an error while processing your request. Please try again."
-        );
+        const errorMsg = "Sorry, I encountered an error while processing your request. Please try again.";
+        await ctx.reply(errorMsg);
+
+        // Save bot error response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: errorMsg,
+          sender: "bot",
+        }).catch(() => {});
       }
     } else {
       // Task: create a background job
@@ -816,7 +1184,17 @@ Use /status to see what I'm working on.`,
         chatId,
       });
 
-      await ctx.reply(formatAckReply(job.id), { parse_mode: "Markdown" });
+      const ackReply = formatAckReply(job.id);
+      await ctx.reply(ackReply, { parse_mode: "Markdown" });
+
+      // Save bot acknowledgment (fire-and-forget, errors logged only)
+      safeSaveMessage({
+        chatId,
+        direction: "out",
+        content: ackReply,
+        sender: "bot",
+        jobId: job.id,
+      }).catch(() => {});
     }
   });
 
@@ -841,28 +1219,64 @@ Use /status to see what I'm working on.`,
     switch (action) {
       case "help": {
         await ctx.answerCallbackQuery();
-        await ctx.reply(formatHelpMessage(), { parse_mode: "Markdown" });
+        const response = formatHelpMessage();
+        await ctx.reply(response, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: response,
+          sender: "bot",
+        }).catch(() => {});
         break;
       }
 
       case "schedules": {
         await ctx.answerCallbackQuery();
         const schedules = await getAllSchedules(db);
-        await ctx.reply(formatSchedulesList(schedules), { parse_mode: "Markdown" });
+        const response = formatSchedulesList(schedules);
+        await ctx.reply(response, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: response,
+          sender: "bot",
+        }).catch(() => {});
         break;
       }
 
       case "solutions": {
         await ctx.answerCallbackQuery();
         const solutions = await getAllSolutions(db);
-        await ctx.reply(formatSolutionsList(solutions), { parse_mode: "Markdown" });
+        const response = formatSolutionsList(solutions);
+        await ctx.reply(response, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: response,
+          sender: "bot",
+        }).catch(() => {});
         break;
       }
 
       case "save": {
         await ctx.answerCallbackQuery();
         if (!jobIdPrefix) {
-          await ctx.reply("Error: No job ID provided.", { parse_mode: "Markdown" });
+          const errorResponse = "Error: No job ID provided.";
+          await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+          // Save bot response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: errorResponse,
+            sender: "bot",
+          }).catch(() => {});
           return;
         }
 
@@ -871,15 +1285,31 @@ Use /status to see what I'm working on.`,
         const job = allJobs.find((j) => j.id.startsWith(jobIdPrefix));
 
         if (!job) {
-          await ctx.reply(`Job \`${jobIdPrefix}\` not found.`, { parse_mode: "Markdown" });
+          const notFoundResponse = `Job \`${jobIdPrefix}\` not found.`;
+          await ctx.reply(notFoundResponse, { parse_mode: "Markdown" });
+
+          // Save bot response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: notFoundResponse,
+            sender: "bot",
+          }).catch(() => {});
           return;
         }
 
         if (job.status !== "completed") {
-          await ctx.reply(
-            `Job \`${jobIdPrefix}\` is not completed yet (status: ${job.status}).`,
-            { parse_mode: "Markdown" }
-          );
+          const notCompletedResponse = `Job \`${jobIdPrefix}\` is not completed yet (status: ${job.status}).`;
+          await ctx.reply(notCompletedResponse, { parse_mode: "Markdown" });
+
+          // Save bot response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: notCompletedResponse,
+            sender: "bot",
+            jobId: job.id,
+          }).catch(() => {});
           return;
         }
 
@@ -895,15 +1325,31 @@ Use /status to see what I'm working on.`,
             keywords,
           });
 
-          await ctx.reply(formatSolutionSaved(tagged.title, tagged.tags), {
+          const successResponse = formatSolutionSaved(tagged.title, tagged.tags);
+          await ctx.reply(successResponse, {
             parse_mode: "Markdown",
           });
+
+          // Save bot response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: successResponse,
+            sender: "bot",
+            jobId: job.id,
+          }).catch(() => {});
         } catch (error) {
           console.error("Error saving solution:", error);
-          await ctx.reply(
-            "Sorry, I encountered an error while saving the solution. Please try again.",
-            { parse_mode: "Markdown" }
-          );
+          const errorResponse = "Sorry, I encountered an error while saving the solution. Please try again.";
+          await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+          // Save bot error response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: errorResponse,
+            sender: "bot",
+          }).catch(() => {});
         }
         break;
       }
@@ -911,7 +1357,16 @@ Use /status to see what I'm working on.`,
       case "schedule": {
         await ctx.answerCallbackQuery();
         if (!jobIdPrefix) {
-          await ctx.reply("Error: No job ID provided.", { parse_mode: "Markdown" });
+          const errorResponse = "Error: No job ID provided.";
+          await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+          // Save bot response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: errorResponse,
+            sender: "bot",
+          }).catch(() => {});
           return;
         }
 
@@ -920,7 +1375,16 @@ Use /status to see what I'm working on.`,
         const job = allJobs.find((j) => j.id.startsWith(jobIdPrefix));
 
         if (!job) {
-          await ctx.reply(`Job \`${jobIdPrefix}\` not found.`, { parse_mode: "Markdown" });
+          const notFoundResponse = `Job \`${jobIdPrefix}\` not found.`;
+          await ctx.reply(notFoundResponse, { parse_mode: "Markdown" });
+
+          // Save bot response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: notFoundResponse,
+            sender: "bot",
+          }).catch(() => {});
           return;
         }
 
@@ -931,17 +1395,33 @@ Use /status to see what I'm working on.`,
           expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes from now
         });
 
-        await ctx.reply(
-          `When should I run this?`,
-          { parse_mode: "Markdown" }
-        );
+        const promptResponse = "When should I run this?";
+        await ctx.reply(promptResponse, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: promptResponse,
+          sender: "bot",
+          jobId: job.id,
+        }).catch(() => {});
         break;
       }
 
       case "retry": {
         await ctx.answerCallbackQuery();
         if (!jobIdPrefix) {
-          await ctx.reply("Error: No job ID provided.", { parse_mode: "Markdown" });
+          const errorResponse = "Error: No job ID provided.";
+          await ctx.reply(errorResponse, { parse_mode: "Markdown" });
+
+          // Save bot response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: errorResponse,
+            sender: "bot",
+          }).catch(() => {});
           return;
         }
 
@@ -949,15 +1429,31 @@ Use /status to see what I'm working on.`,
         const job = jobs.find((j) => j.id.startsWith(jobIdPrefix));
 
         if (!job) {
-          await ctx.reply(`Job \`${jobIdPrefix}\` not found.`, { parse_mode: "Markdown" });
+          const notFoundResponse = `Job \`${jobIdPrefix}\` not found.`;
+          await ctx.reply(notFoundResponse, { parse_mode: "Markdown" });
+
+          // Save bot response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: notFoundResponse,
+            sender: "bot",
+          }).catch(() => {});
           return;
         }
 
         if (job.status !== "failed") {
-          await ctx.reply(
-            `Job \`${jobIdPrefix}\` is not failed (status: ${job.status}). Only failed jobs can be retried.`,
-            { parse_mode: "Markdown" }
-          );
+          const notFailedResponse = `Job \`${jobIdPrefix}\` is not failed (status: ${job.status}). Only failed jobs can be retried.`;
+          await ctx.reply(notFailedResponse, { parse_mode: "Markdown" });
+
+          // Save bot response (fire-and-forget, errors logged only)
+          safeSaveMessage({
+            chatId,
+            direction: "out",
+            content: notFailedResponse,
+            sender: "bot",
+            jobId: job.id,
+          }).catch(() => {});
           return;
         }
 
@@ -968,7 +1464,17 @@ Use /status to see what I'm working on.`,
           chatId,
         });
 
-        await ctx.reply(formatAckReply(newJob.id), { parse_mode: "Markdown" });
+        const ackResponse = formatAckReply(newJob.id);
+        await ctx.reply(ackResponse, { parse_mode: "Markdown" });
+
+        // Save bot response (fire-and-forget, errors logged only)
+        safeSaveMessage({
+          chatId,
+          direction: "out",
+          content: ackResponse,
+          sender: "bot",
+          jobId: newJob.id,
+        }).catch(() => {});
         break;
       }
 

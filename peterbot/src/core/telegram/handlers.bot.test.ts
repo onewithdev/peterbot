@@ -133,6 +133,24 @@ mock.module("../../features/solutions/service", () => ({
   buildKeywords: mock(() => "test keywords"),
 }));
 
+// Mock chat repository
+const mockSaveMessage = mock(async () => ({
+  id: "msg-1234-e29b-41d4-a716-446655440000",
+  chatId: "12345",
+  direction: "out",
+  content: "Test message",
+  sender: "bot",
+  jobId: null,
+  createdAt: new Date(),
+}));
+
+mock.module("../../features/chat/repository.js", () => ({
+  saveMessage: mockSaveMessage,
+  getMessages: mock(async () => []),
+  getMessagesSince: mock(async () => []),
+  getMessagesBefore: mock(async () => []),
+}));
+
 // Import setupHandlers dynamically after mocks are set up
 // We use type-only import for the type, then dynamic import for the actual function
 import type { setupHandlers as SetupHandlersType } from "./handlers";
@@ -297,6 +315,7 @@ describe("bot-level harness tests", () => {
     mockGetJobById.mockClear();
     mockGetAllSchedules.mockClear();
     mockGenerateText.mockClear();
+    mockSaveMessage.mockClear();
   });
 
   describe("/start command", () => {
@@ -320,6 +339,28 @@ describe("bot-level harness tests", () => {
       expect(text).toContain("👋 Hi!");
       expect(text).toContain("Send me a task");
       expect(text).toContain("/status");
+    });
+
+    test("should save user message and bot response to chat", async () => {
+      await bot.handleUpdate(makeMessageUpdate("/start"));
+
+      // Should save both user message and bot response
+      expect(mockSaveMessage).toHaveBeenCalledTimes(2);
+      
+      // First call should be user message
+      expect(mockSaveMessage).toHaveBeenNthCalledWith(1, undefined, {
+        chatId: "12345",
+        direction: "in",
+        content: "/start",
+        sender: "user",
+      });
+      
+      // Second call should be bot response
+      expect(mockSaveMessage).toHaveBeenNthCalledWith(2, undefined, expect.objectContaining({
+        chatId: "12345",
+        direction: "out",
+        sender: "bot",
+      }));
     });
 
     test("should include inline keyboard with quick actions", async () => {
@@ -682,6 +723,40 @@ describe("bot-level harness tests", () => {
       expect(payload.parse_mode).toBe("Markdown");
     });
 
+    test("should save user message and bot ack for task messages", async () => {
+      mockCreateJob.mockResolvedValueOnce({
+        id: "770e8400-e29b-41d4-a716-446655440002",
+        type: "task",
+        status: "pending",
+        input: "Research artificial intelligence",
+        chatId: "12345",
+        delivered: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await bot.handleUpdate(makeMessageUpdate("Research artificial intelligence"));
+
+      // Should save user message and bot acknowledgment
+      expect(mockSaveMessage).toHaveBeenCalledTimes(2);
+      
+      // First call should be user message
+      expect(mockSaveMessage).toHaveBeenNthCalledWith(1, undefined, {
+        chatId: "12345",
+        direction: "in",
+        content: "Research artificial intelligence",
+        sender: "user",
+      });
+      
+      // Second call should be bot acknowledgment with jobId
+      expect(mockSaveMessage).toHaveBeenNthCalledWith(2, undefined, expect.objectContaining({
+        chatId: "12345",
+        direction: "out",
+        sender: "bot",
+        jobId: "770e8400-e29b-41d4-a716-446655440002",
+      }));
+    });
+
     test("should handle quick messages with AI response", async () => {
       mockGenerateText.mockResolvedValueOnce({
         text: "Hello! How can I help you today?",
@@ -699,6 +774,33 @@ describe("bot-level harness tests", () => {
       
       const payload = sendMessageCalls[0].payload as any;
       expect(payload.text).toBe("Hello! How can I help you today?");
+    });
+
+    test("should save user message and bot response for quick messages", async () => {
+      mockGenerateText.mockResolvedValueOnce({
+        text: "Hello! How can I help you today?",
+      });
+
+      await bot.handleUpdate(makeMessageUpdate("Hello!"));
+
+      // Should save user message and bot response
+      expect(mockSaveMessage).toHaveBeenCalledTimes(2);
+      
+      // First call should be user message
+      expect(mockSaveMessage).toHaveBeenNthCalledWith(1, undefined, {
+        chatId: "12345",
+        direction: "in",
+        content: "Hello!",
+        sender: "user",
+      });
+      
+      // Second call should be bot response (no jobId for quick messages)
+      expect(mockSaveMessage).toHaveBeenNthCalledWith(2, undefined, expect.objectContaining({
+        chatId: "12345",
+        direction: "out",
+        content: "Hello! How can I help you today?",
+        sender: "bot",
+      }));
     });
   });
 

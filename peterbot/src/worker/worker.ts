@@ -55,6 +55,7 @@ import {
   getButtonsForContext,
   buildInlineKeyboard,
 } from "../core/telegram/buttons.js";
+import { saveMessage } from "../features/chat/repository.js";
 
 // Force early validation of required config (throws if missing)
 config.googleApiKey;
@@ -258,18 +259,32 @@ async function deliverResult(job: Job, result: string): Promise<void> {
 
   // Truncate result to fit within Telegram's message limit
   const truncatedResult = truncateForTelegram(result, header);
+  const fullMessage = header + truncatedResult;
 
   // Build inline keyboard for task_completed context
   const buttons = getButtonsForContext("task_completed", { jobIdPrefix: shortId });
   const keyboard = buildInlineKeyboard(buttons);
 
   try {
-    await bot.api.sendMessage(job.chatId, header + truncatedResult, {
+    await bot.api.sendMessage(job.chatId, fullMessage, {
       reply_markup: keyboard,
     });
 
     await markJobDelivered(db, job.id);
     console.log(`[Worker] Delivered result for job ${shortId}`);
+
+    // Save bot response to chat
+    try {
+      await saveMessage(undefined, {
+        chatId: job.chatId,
+        direction: "out",
+        content: fullMessage,
+        sender: "bot",
+        jobId: job.id,
+      });
+    } catch (chatError) {
+      console.error(`[Worker] Failed to save chat message for job ${shortId}:`, chatError);
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`[Worker] Failed to deliver result for job ${shortId}:`, errorMessage);
@@ -303,14 +318,25 @@ async function notifyFailure(job: Job, error: string): Promise<void> {
   try {
     const bot = new Bot(TELEGRAM_BOT_TOKEN);
     const shortId = job.id.slice(0, 8);
+    const failureMessage = `❌ Task failed [${shortId}]\n\nError: ${error}\n\nReply "retry ${shortId}" to try again.`;
 
-    await bot.api.sendMessage(
-      job.chatId,
-      `❌ Task failed [${shortId}]\n\nError: ${error}\n\nReply "retry ${shortId}" to try again.`
-    );
+    await bot.api.sendMessage(job.chatId, failureMessage);
 
     await markJobDelivered(db, job.id);
     console.log(`[Worker] Sent failure notification for job ${shortId}`);
+
+    // Save bot failure message to chat
+    try {
+      await saveMessage(undefined, {
+        chatId: job.chatId,
+        direction: "out",
+        content: failureMessage,
+        sender: "bot",
+        jobId: job.id,
+      });
+    } catch (chatError) {
+      console.error(`[Worker] Failed to save failure chat message for job ${shortId}:`, chatError);
+    }
   } catch (notifyError) {
     const errorMessage = notifyError instanceof Error ? notifyError.message : String(notifyError);
     console.error(`[Worker] Failed to send failure notification for job ${job.id.slice(0, 8)}:`, errorMessage);

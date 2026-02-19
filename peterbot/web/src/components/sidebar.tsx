@@ -11,6 +11,7 @@ import {
   LogOut,
   Archive,
   BookOpen,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { clearPassword } from "@/lib/auth";
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { label: "Schedules", path: "/schedules", icon: Clock },
   { label: "Sessions", path: "/sessions", icon: Archive },
   { label: "Solutions", path: "/solutions", icon: BookOpen },
+  { label: "Chat", path: "/chat", icon: MessageSquare },
   { label: "Config", path: "/config", icon: Settings },
   { label: "Dev Console", path: "/console", icon: Terminal, external: true },
 ];

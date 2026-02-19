@@ -16,3 +16,5 @@ writing plans
 
 specialized agents - mastra agents (?)
 common sense module
+
+i think soul/memory should be in settings/config and overview -> rename to health-check
