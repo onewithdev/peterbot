@@ -282,6 +282,61 @@ Professional but approachable. Efficient yet warm.
 };
 
 /**
+ * Suspicious content patterns that might indicate accidental writes.
+ */
+const SUSPICIOUS_PATTERNS = [
+  /^test$/i,           // Just the word "test"
+  /^hello$/i,          // Just "hello"
+  /^temp$/i,           // Just "temp"
+];
+
+/**
+ * Validate content before writing to prevent accidental overwrites.
+ */
+function validateConfigContent(type: ConfigFileType, content: string): void {
+  const trimmed = content.trim();
+
+  // Check for suspiciously short content
+  if (trimmed.length < 10) {
+    throw new FileOperationError(
+      `Suspicious content for ${type}: content too short (${trimmed.length} chars). ` +
+      `This might be an accidental write. Content: "${trimmed}"`,
+      CONFIG_PATHS[type],
+      "write"
+    );
+  }
+
+  // Check for exact suspicious patterns
+  if (SUSPICIOUS_PATTERNS.some(pattern => pattern.test(trimmed))) {
+    throw new FileOperationError(
+      `Suspicious content for ${type}: content matches pattern "${trimmed}". ` +
+      `This might be an accidental write.`,
+      CONFIG_PATHS[type],
+      "write"
+    );
+  }
+}
+
+/**
+ * Write config file with validation to prevent accidental overwrites.
+ *
+ * @param type - Configuration file type
+ * @param content - Content to write
+ * @param options - Options including validate flag
+ * @throws FileOperationError on validation failure or write failure
+ */
+export async function writeConfigFileSafe(
+  type: ConfigFileType,
+  content: string,
+  options: { validate?: boolean } = { validate: true }
+): Promise<void> {
+  if (options.validate) {
+    validateConfigContent(type, content);
+  }
+  await writeConfigFile(type, content);
+}
+
+/**
  * Reset a configuration file to its default content.
  *
  * @param type - Configuration file type

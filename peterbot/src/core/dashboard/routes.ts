@@ -22,6 +22,7 @@ import { passwordAuth } from "./auth.js";
 import {
   readConfigFile,
   writeConfigFile,
+  writeConfigFileSafe,
   getConfigFileStats,
   validateBlocklist,
   DEFAULT_CONFIG_CONTENT,
@@ -253,7 +254,7 @@ const app = new Hono()
     ),
     async (c) => {
       const { content } = c.req.valid("json");
-      await writeConfigFile("soul", content);
+      await writeConfigFileSafe("soul", content);
 
       const stats = await getConfigFileStats("soul");
 
@@ -302,7 +303,7 @@ const app = new Hono()
     ),
     async (c) => {
       const { content } = c.req.valid("json");
-      await writeConfigFile("memory", content);
+      await writeConfigFileSafe("memory", content);
 
       const stats = await getConfigFileStats("memory");
 

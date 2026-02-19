@@ -108,7 +108,7 @@ describe("API Contract - Response Shape Verification", () => {
           [PASSWORD_HEADER]: "test_integration_password",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ content: "test" }),
+        body: JSON.stringify({ content: "# Valid Soul Content\n\nThis is valid personality content." }),
       });
       const body = await res.json();
 

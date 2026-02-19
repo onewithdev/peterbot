@@ -10,6 +10,7 @@ import { join } from "path";
 import {
   readConfigFile,
   writeConfigFile,
+  writeConfigFileSafe,
   getConfigFileStats,
   validateBlocklist,
   DEFAULT_CONFIG_CONTENT,
@@ -380,5 +381,62 @@ describe("Concurrent file operations", () => {
     // File should exist with last written content
     const content = await readConfigFile("soul");
     expect(content).toBe("Content C");
+  });
+});
+
+describe("writeConfigFileSafe validation", () => {
+  let testDir: string;
+
+  beforeEach(async () => {
+    testDir = await createTestDir();
+    _setTestProjectRoot(testDir);
+  });
+
+  afterEach(async () => {
+    _setTestProjectRoot(null);
+    try {
+      await rm(testDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it("rejects content that is just 'test'", async () => {
+    await expect(writeConfigFileSafe("soul", "test")).rejects.toThrow("Suspicious content");
+  });
+
+  it("rejects content that is too short (< 10 chars)", async () => {
+    await expect(writeConfigFileSafe("soul", "hi")).rejects.toThrow("too short");
+  });
+
+  it("rejects content that is just 'hello'", async () => {
+    await expect(writeConfigFileSafe("soul", "hello")).rejects.toThrow("Suspicious content");
+  });
+
+  it("rejects content that is just 'temp'", async () => {
+    await expect(writeConfigFileSafe("soul", "temp")).rejects.toThrow("Suspicious content");
+  });
+
+  it("accepts valid content", async () => {
+    const content = "# Valid Soul Content\n\nThis is a personality.";
+    await writeConfigFileSafe("soul", content);
+
+    const read = await readConfigFile("soul");
+    expect(read).toBe(content);
+  });
+
+  it("allows bypassing validation with option", async () => {
+    await writeConfigFileSafe("soul", "test", { validate: false });
+
+    const read = await readConfigFile("soul");
+    expect(read).toBe("test");
+  });
+
+  it("accepts content with more than 10 chars", async () => {
+    const content = "This is valid content.";
+    await writeConfigFileSafe("soul", content);
+
+    const read = await readConfigFile("soul");
+    expect(read).toBe(content);
   });
 });
