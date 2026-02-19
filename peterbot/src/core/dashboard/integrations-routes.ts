@@ -4,16 +4,12 @@ import { z } from "zod";
 import { passwordAuth } from "./auth.js";
 import {
   getConnectedApps,
-  upsertConnection,
   toggleConnectionEnabled,
-  removeConnection,
 } from "../../features/integrations/repository.js";
 import {
   isConfigured,
-  getOAuthUrl,
-  validateAndConsumeState,
-  checkConnection,
-  revokeConnection,
+  syncFromComposio,
+  getLastSyncedAt,
 } from "../../features/integrations/service.js";
 
 /**
@@ -24,15 +20,92 @@ const ProviderParamSchema = z.object({
 });
 
 /**
- * Known providers with their display info.
+ * Provider definition with metadata.
  */
-const KNOWN_PROVIDERS = [
-  { provider: "gmail", label: "Gmail", icon: "mail" },
-  { provider: "github", label: "GitHub", icon: "github" },
-  { provider: "google-drive", label: "Google Drive", icon: "folder" },
-  { provider: "notion", label: "Notion", icon: "file-text" },
-  { provider: "google-calendar", label: "Google Calendar", icon: "calendar" },
-  { provider: "linear", label: "Linear", icon: "check-square" },
+interface ProviderDefinition {
+  provider: string;
+  label: string;
+  icon: string;
+  required: boolean;
+  category: string;
+  description: string;
+}
+
+/**
+ * Known providers with their display info and requirements.
+ */
+const KNOWN_PROVIDERS: ProviderDefinition[] = [
+  // REQUIRED
+  {
+    provider: "gmail",
+    label: "Gmail",
+    icon: "mail",
+    required: true,
+    category: "Required",
+    description: "Required for email processing and notifications",
+  },
+
+  // DOCUMENTS
+  {
+    provider: "googledocs",
+    label: "Google Docs",
+    icon: "file-text",
+    required: false,
+    category: "Documents",
+    description: "Needed to read, create, and edit Google Documents",
+  },
+  {
+    provider: "googlesheets",
+    label: "Google Sheets",
+    icon: "table",
+    required: false,
+    category: "Documents",
+    description: "Needed for spreadsheet data processing",
+  },
+  {
+    provider: "google_drive",
+    label: "Google Drive",
+    icon: "folder",
+    required: false,
+    category: "Documents",
+    description: "Required for file storage and retrieval",
+  },
+  {
+    provider: "googlecalendar",
+    label: "Google Calendar",
+    icon: "calendar",
+    required: false,
+    category: "Scheduling",
+    description: "Needed for scheduling and calendar events",
+  },
+
+  // DEVELOPMENT
+  {
+    provider: "github",
+    label: "GitHub",
+    icon: "github",
+    required: false,
+    category: "Development",
+    description: "Required for code repository management",
+  },
+
+  // PRODUCTIVITY
+  {
+    provider: "notion",
+    label: "Notion",
+    icon: "file-text",
+    required: false,
+    category: "Productivity",
+    description: "Needed for Notion page and database access",
+  },
+  {
+    provider: "linear",
+    label: "Linear",
+    icon: "check-square",
+    required: false,
+    category: "Productivity",
+    description: "Needed for issue tracking and project management",
+  },
 ];
 
 /**
@@ -48,6 +121,7 @@ export const integrationsRoutes = new Hono()
     if (!isConfigured()) {
       return c.json({
         configured: false,
+        lastSyncedAt: getLastSyncedAt()?.toISOString() ?? null,
         providers: [],
       });
     }
@@ -61,103 +135,50 @@ export const integrationsRoutes = new Hono()
       return {
         ...known,
         connected: !!app,
+        enabled: app?.enabled ?? true,
         app: app || null,
       };
     });
 
     return c.json({
       configured: true,
+      lastSyncedAt: getLastSyncedAt()?.toISOString() ?? null,
       providers,
     });
   })
 
   // ==========================================================================
-  // POST /:provider/connect - Initiate OAuth flow
+  // POST /sync - Sync connected accounts from Composio
   // ==========================================================================
-  .post(
-    "/:provider/connect",
-    passwordAuth,
-    zValidator("param", ProviderParamSchema),
-    async (c) => {
-      const { provider } = c.req.valid("param");
+  .post("/sync", passwordAuth, async (c) => {
+    const result = await syncFromComposio();
 
-      const result = await getOAuthUrl(provider);
-
-      if ("error" in result) {
-        if (result.error === "not_configured") {
-          return c.json(
-            {
-              error: "Service Unavailable",
-              message: result.message,
-            },
-            503
-          );
-        }
+    if ("error" in result) {
+      if (result.error === "not_configured") {
         return c.json(
           {
-            error: "Internal Server Error",
+            error: "Service Unavailable",
             message: result.message,
           },
-          500
+          503
         );
       }
-
-      return c.json({
-        redirectUrl: result.redirectUrl,
-        state: result.state,
-      });
+      return c.json(
+        {
+          error: "Internal Server Error",
+          message: result.message,
+        },
+        500
+      );
     }
-  )
 
-  // ==========================================================================
-  // GET /callback - OAuth callback (public, no auth required)
-  // ==========================================================================
-  .get(
-    "/callback",
-    zValidator(
-      "query",
-      z.object({
-        state: z.string(),
-        provider: z.string(),
-      })
-    ),
-    async (c) => {
-      const { state, provider } = c.req.valid("query");
-
-      // Validate state token
-      const validatedProvider = validateAndConsumeState(state);
-      if (!validatedProvider) {
-        return c.redirect("/integrations?error=invalid_state");
-      }
-
-      // Verify provider matches
-      if (validatedProvider !== provider) {
-        return c.redirect("/integrations?error=invalid_state");
-      }
-
-      // Check connection status from Composio
-      const connectionResult = await checkConnection(provider);
-
-      if ("error" in connectionResult) {
-        return c.redirect(`/integrations?error=connection_failed`);
-      }
-
-      // Verify connection is actually connected
-      if (connectionResult.connected !== true) {
-        return c.redirect(`/integrations?error=connection_failed`);
-      }
-
-      // Upsert connection in DB
-      await upsertConnection(undefined, {
-        provider,
-        composioEntityId: "peterbot-user",
-        accountEmail: connectionResult.accountEmail,
-        enabled: true,
-      });
-
-      return c.redirect(`/integrations?connected=${provider}`);
-    }
-  )
+    return c.json({
+      success: true,
+      added: result.added,
+      removed: result.removed,
+      unchanged: result.unchanged,
+    });
+  })
 
   // ==========================================================================
   // PATCH /:provider/toggle - Enable/disable integration
@@ -182,32 +203,4 @@ export const integrationsRoutes = new Hono()
     }
   )
 
-  // ==========================================================================
-  // DELETE /:provider - Revoke integration
-  // ==========================================================================
-  .delete(
-    "/:provider",
-    passwordAuth,
-    zValidator("param", ProviderParamSchema),
-    async (c) => {
-      const { provider } = c.req.valid("param");
 
-      // Revoke from Composio
-      const result = await revokeConnection(provider);
-
-      if ("error" in result && result.error === "sdk_error") {
-        return c.json(
-          {
-            error: "Internal Server Error",
-            message: result.message,
-          },
-          500
-        );
-      }
-
-      // Remove from DB
-      await removeConnection(undefined, provider);
-
-      return c.json({ success: true });
-    }
-  );

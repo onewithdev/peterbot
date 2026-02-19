@@ -21,7 +21,6 @@
  */
 
 import { Sandbox } from "@e2b/code-interpreter";
-import { config } from "../../shared/config.js";
 
 /**
  * Session timeout in milliseconds (5 minutes of inactivity).

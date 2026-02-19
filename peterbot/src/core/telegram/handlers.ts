@@ -11,7 +11,6 @@ import {
   getAllSchedules,
   createSchedule,
   deleteSchedule,
-  getScheduleById,
 } from "../../features/cron/repository";
 import {
   parseNaturalSchedule,

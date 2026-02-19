@@ -41,6 +41,7 @@ Login with the `DASHBOARD_PASSWORD` from your `.env` file.
 - **Config** - Manage blocklist patterns
 - **Monitor** - View and manage all jobs
 - **Console** - Execute code in E2B sandbox
+- **Integrations** - Manage connected services via Composio
 
 ## API Keys Setup
 
@@ -59,6 +60,45 @@ You'll need 4 API keys to run peterbot:
 2. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
 3. Look for `"chat":{"id":123456789,...}`
 4. Copy the number (including the minus sign if present)
+
+## Integrations Setup
+
+peterbot integrates with external services via [Composio](https://composio.dev). Unlike traditional OAuth flows, connections are established in the Composio dashboard and synced to peterbot.
+
+### Prerequisites
+
+Add your Composio API key to `.env`:
+```
+COMPOSIO_API_KEY=your_api_key_here
+```
+
+Get your API key from [app.composio.dev](https://app.composio.dev).
+
+### Connecting an Integration
+
+1. Go to [Composio Dashboard](https://app.composio.dev/accounts)
+2. Click "Add Account"
+3. Search for and select the service you want to connect
+4. Complete the OAuth flow
+5. Return to peterbot's **Integrations** page
+6. Click **"Sync from Composio"**
+
+Your connected accounts will appear in peterbot with their current status.
+
+### Supported Providers
+
+| Provider | Category | Required |
+|----------|----------|----------|
+| Gmail | Required | ★ Yes |
+| Google Docs | Documents | No |
+| Google Sheets | Documents | No |
+| Google Drive | Documents | No |
+| Google Calendar | Scheduling | No |
+| GitHub | Development | No |
+| Notion | Productivity | No |
+| Linear | Productivity | No |
+
+**Note:** Disabling a provider in peterbot only suppresses its use within the bot — it does not disconnect the account from Composio. To fully disconnect, manage your accounts in the [Composio Dashboard](https://app.composio.dev/accounts).
 
 ## Available Commands
 
@@ -142,6 +182,7 @@ TELEGRAM_CHAT_ID
 ANTHROPIC_API_KEY
 E2B_API_KEY
 DASHBOARD_PASSWORD (required - sets login password for web dashboard)
+COMPOSIO_API_KEY (optional - required for integrations)
 PORT (optional, defaults to 3000)
 SQLITE_DB_PATH (optional, defaults to ./data/jobs.db)
 ```

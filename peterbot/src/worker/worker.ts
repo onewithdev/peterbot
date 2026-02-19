@@ -46,6 +46,7 @@ import { config } from "../shared/config.js";
 import { db } from "../db/index.js";
 import { readConfigFile } from "../core/dashboard/files.js";
 import { schedulerLoop, getScheduleById } from "./scheduler.js";
+import { syncLoop } from "./sync-loop.js";
 import {
   getOrCreateChatState,
   seedDefaultConfig,
@@ -554,6 +555,12 @@ if (import.meta.main) {
   schedulerLoop(db, config.telegramChatId).catch((error) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("[Scheduler] Fatal error:", errorMessage);
+  });
+
+  // Start the sync loop for background integration syncing
+  syncLoop().catch((error) => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[SyncLoop] Fatal error:", errorMessage);
   });
 
   pollLoop().catch((error) => {

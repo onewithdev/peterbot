@@ -1,9 +1,10 @@
-import { createFileRoute, useSearch, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +12,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Link2,
@@ -22,7 +22,11 @@ import {
   Calendar,
   CheckSquare,
   AlertCircle,
-  ChevronDown,
+  RefreshCw,
+  Table,
+  HelpCircle,
+  ExternalLink,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -32,6 +36,27 @@ export const Route = createFileRoute("/integrations")({
   component: IntegrationsPage,
 });
 
+// Helper function to format relative time
+function formatRelativeTime(timestamp: string | null): string | null {
+  if (!timestamp) return null;
+  
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  
+  if (diffMinutes < 1) {
+    return "just now";
+  } else if (diffMinutes < 60) {
+    return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
+  } else if (diffHours < 24) {
+    return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  } else {
+    return date.toLocaleDateString();
+  }
+}
+
 // Icon mapping
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   mail: Mail,
@@ -40,39 +65,77 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "file-text": FileText,
   calendar: Calendar,
   "check-square": CheckSquare,
+  table: Table,
 };
+
+// Instructions modal component
+function InstructionsDialog({
+  provider,
+  open,
+  onOpenChange,
+}: {
+  provider: ApiProvider;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            Connect {provider.label}
+          </DialogTitle>
+          <DialogDescription>{provider.description}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <div className="rounded-lg bg-muted p-4 space-y-3">
+            <p className="text-sm font-medium">Steps to connect:</p>
+            <ol className="text-sm space-y-2 list-decimal list-inside">
+              <li>
+                Go to{" "}
+                <a
+                  href="https://app.composio.dev/accounts"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  Composio Dashboard
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </li>
+              <li>Click "Add Account"</li>
+              <li>
+                Search for and select <strong>{provider.label}</strong>
+              </li>
+              <li>Complete the OAuth flow</li>
+              <li>Return here and click "Sync from Composio"</li>
+            </ol>
+          </div>
+
+          {provider.required && (
+            <div className="flex items-start gap-2 text-amber-600 text-sm">
+              <Star className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>
+                This integration is <strong>required</strong> for some Peterbot
+                features to work properly.
+              </span>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button onClick={() => onOpenChange(false)}>Got it</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function IntegrationsPage() {
   const queryClient = useQueryClient();
-  const navigate = useNavigate({ from: "/integrations" });
-  const search = useSearch({ from: "/integrations" }) as {
-    connected?: string;
-    error?: string;
-  };
-  const [revokingProvider, setRevokingProvider] = useState<string | null>(null);
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-
-  // Handle URL params on mount
-  useEffect(() => {
-    if (search.connected) {
-      const provider = search.connected;
-      const displayName = provider.charAt(0).toUpperCase() + provider.slice(1);
-      toast.success(`${displayName} connected successfully`);
-      // Clear the param
-      navigate({ search: {} });
-    }
-    if (search.error) {
-      if (search.error === "invalid_state") {
-        toast.error("Connection failed: Invalid or expired state");
-      } else if (search.error === "connection_failed") {
-        toast.error("Connection failed: Could not verify connection");
-      } else {
-        toast.error(`Connection failed: ${search.error}`);
-      }
-      // Clear the param
-      navigate({ search: {} });
-    }
-  }, [search, navigate]);
+  const [instructionsProvider, setInstructionsProvider] =
+    useState<ApiProvider | null>(null);
 
   // Fetch integrations
   const { data: integrationsData, isLoading } = useQuery<IntegrationsResponse>({
@@ -85,25 +148,46 @@ function IntegrationsPage() {
 
   const providers: ApiProvider[] = integrationsData?.providers ?? [];
   const isConfigured = integrationsData?.configured ?? false;
+  const lastSyncedAt = integrationsData?.lastSyncedAt ?? null;
 
-  // Connect mutation
-  const connectMutation = useMutation({
-    mutationFn: async (provider: string) => {
-      const response = await api.integrations[":provider"].connect.$post({
-        param: { provider },
-      });
+  // Group providers by category
+  const groupedProviders = providers.reduce(
+    (acc, provider) => {
+      const category = provider.category || "Other";
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(provider);
+      return acc;
+    },
+    {} as Record<string, ApiProvider[]>
+  );
+
+  // Sync mutation
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.integrations.sync.$post();
       const result = await response.json();
       if (!response.ok) {
-        throw new Error("Failed to initiate connection");
+        throw new Error("Failed to sync");
       }
-      return result as { redirectUrl: string; state: string };
+      return result as {
+        success: true;
+        added: string[];
+        removed: string[];
+        unchanged: string[];
+      };
     },
     onSuccess: (result) => {
-      // Navigate to Composio OAuth page
-      window.location.href = result.redirectUrl;
+      queryClient.invalidateQueries({ queryKey: ["integrations"] });
+      if (result.added.length === 0 && result.removed.length === 0) {
+        toast.info("Already up to date");
+      } else {
+        toast.success(
+          `Synced: ${result.added.length} added, ${result.removed.length} removed, ${result.unchanged.length} unchanged`
+        );
+      }
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to initiate connection");
+      toast.error(error.message || "Failed to sync from Composio");
     },
   });
 
@@ -134,46 +218,42 @@ function IntegrationsPage() {
     },
   });
 
-  // Revoke mutation
-  const revokeMutation = useMutation({
-    mutationFn: async (provider: string) => {
-      const response = await api.integrations[":provider"].$delete({
-        param: { provider },
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error("Failed to revoke connection");
-      }
-      return result;
-    },
-    onSuccess: () => {
-      setRevokingProvider(null);
-      setConfirmDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["integrations"] });
-      toast.success("Connection revoked");
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to revoke connection");
-    },
-  });
 
-  const handleConnect = (provider: string) => {
-    connectMutation.mutate(provider);
+
+  const handleSync = () => {
+    syncMutation.mutate();
   };
 
   const handleToggle = (provider: string, enabled: boolean) => {
     toggleMutation.mutate({ provider, enabled });
   };
 
-  const handleRevoke = (provider: string) => {
-    setRevokingProvider(provider);
-    setConfirmDialogOpen(true);
-  };
-
-  const confirmRevoke = () => {
-    if (revokingProvider) {
-      revokeMutation.mutate(revokingProvider);
+  const getStatusBadge = (provider: ApiProvider) => {
+    if (!provider.connected) {
+      return (
+        <Badge variant="secondary" className="text-muted-foreground">
+          Not Connected
+        </Badge>
+      );
     }
+    if (!provider.enabled) {
+      return (
+        <Badge
+          variant="outline"
+          className="text-amber-600 border-amber-600 bg-amber-50"
+        >
+          Disabled
+        </Badge>
+      );
+    }
+    return (
+      <Badge
+        variant="outline"
+        className="text-green-700 border-green-700 bg-green-50"
+      >
+        Connected
+      </Badge>
+    );
   };
 
   return (
@@ -186,9 +266,36 @@ function IntegrationsPage() {
             Integrations
           </h1>
           <p className="text-muted-foreground">
-            Connect external apps via Composio OAuth
+            Manage connections via{" "}
+            <a
+              href="https://composio.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Composio
+            </a>
           </p>
         </div>
+        {isConfigured && (
+          <div className="flex flex-col items-end gap-1.5">
+            {lastSyncedAt && (
+              <span className="text-xs text-muted-foreground">
+                Last synced: {formatRelativeTime(lastSyncedAt)}
+              </span>
+            )}
+            <Button
+              onClick={handleSync}
+              disabled={syncMutation.isPending}
+              className="gap-2"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
+              />
+              Sync from Composio
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Not Configured State */}
@@ -197,8 +304,9 @@ function IntegrationsPage() {
           <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium">Composio not configured</h3>
           <p className="text-sm text-muted-foreground mt-2 max-w-md">
-            Add <code className="bg-muted px-1 py-0.5 rounded">COMPOSIO_API_KEY</code> to your
-            environment to enable integrations. Get your API key at{" "}
+            Add{" "}
+            <code className="bg-muted px-1 py-0.5 rounded">COMPOSIO_API_KEY</code>{" "}
+            to your environment to enable integrations. Get your API key at{" "}
             <a
               href="https://composio.dev"
               target="_blank"
@@ -219,115 +327,103 @@ function IntegrationsPage() {
         </div>
       )}
 
-      {/* Providers Grid */}
-      {isConfigured && !isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {providers.map((provider) => {
-            const Icon = iconMap[provider.icon] || Link2;
-            const isConnecting = connectMutation.isPending && connectMutation.variables === provider.provider;
+      {/* Providers by Category */}
+      {isConfigured &&
+        !isLoading &&
+        Object.entries(groupedProviders).map(([category, categoryProviders]) => (
+          <div key={category} className="space-y-4">
+            <h2 className="text-lg font-semibold text-muted-foreground">
+              {category}
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {categoryProviders.map((provider) => {
+                const Icon = iconMap[provider.icon] || Link2;
 
-            return (
-              <Card key={provider.provider}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-5 w-5 text-muted-foreground" />
-                        <span className="font-medium">{provider.label}</span>
-                        {provider.connected ? (
-                          <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                            ● Connected
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                            ○ Not connected
-                          </span>
+                return (
+                  <Card key={provider.provider}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Icon className="h-5 w-5 text-muted-foreground" />
+                            <span className="font-medium">{provider.label}</span>
+                            {provider.required && (
+                              <Badge
+                                variant="outline"
+                                className="text-amber-600 border-amber-600 text-xs"
+                              >
+                                <Star className="h-3 w-3 mr-1 fill-current" />
+                                Required
+                              </Badge>
+                            )}
+                            {getStatusBadge(provider)}
+                          </div>
+
+                          <p className="text-sm text-muted-foreground">
+                            {provider.description}
+                          </p>
+
+                          {provider.connected && provider.app?.accountEmail && (
+                            <p className="text-sm text-muted-foreground">
+                              {provider.app.accountEmail}
+                            </p>
+                          )}
+
+                          <div className="flex items-center gap-2 pt-2">
+                            {provider.connected ? (
+                              <>
+                                <Switch
+                                  checked={provider.enabled}
+                                  onCheckedChange={(enabled) =>
+                                    handleToggle(provider.provider, enabled)
+                                  }
+                                  disabled={toggleMutation.isPending}
+                                />
+                                <span className="text-sm text-muted-foreground">
+                                  {provider.enabled ? "Enabled" : "Disabled"}
+                                </span>
+                              </>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setInstructionsProvider(provider)}
+                                className="gap-1"
+                              >
+                                <HelpCircle className="h-4 w-4" />
+                                How to Connect
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {provider.connected && (
+                          <a
+                            href="https://app.composio.dev/accounts"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+                          >
+                            Manage in Composio
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
                         )}
                       </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        ))}
 
-                      {provider.connected && provider.app?.accountEmail && (
-                        <p className="text-sm text-muted-foreground">
-                          {provider.app.accountEmail}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-2 pt-1">
-                        {provider.connected ? (
-                          <>
-                            <Switch
-                              checked={provider.app?.enabled ?? true}
-                              onCheckedChange={(enabled) =>
-                                handleToggle(provider.provider, enabled)
-                              }
-                              disabled={toggleMutation.isPending}
-                            />
-                            <span className="text-sm text-muted-foreground">
-                              {provider.app?.enabled ? "Enabled" : "Disabled"}
-                            </span>
-                          </>
-                        ) : (
-                          <Button
-                            size="sm"
-                            onClick={() => handleConnect(provider.provider)}
-                            disabled={isConnecting}
-                          >
-                            {isConnecting ? "Connecting..." : "Connect"}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {provider.connected && (
-                      <Dialog open={confirmDialogOpen && revokingProvider === provider.provider} onOpenChange={(open) => {
-                        setConfirmDialogOpen(open);
-                        if (!open) setRevokingProvider(null);
-                      }}>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground hover:text-destructive"
-                            onClick={() => handleRevoke(provider.provider)}
-                          >
-                            Revoke access
-                            <ChevronDown className="h-3 w-3 ml-1" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Revoke {provider.label} Access</DialogTitle>
-                            <DialogDescription>
-                              Are you sure you want to revoke access to {provider.label}?
-                              This will disconnect the integration and remove all associated data.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <DialogFooter>
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                setConfirmDialogOpen(false);
-                                setRevokingProvider(null);
-                              }}
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              onClick={confirmRevoke}
-                              disabled={revokeMutation.isPending}
-                            >
-                              {revokeMutation.isPending ? "Revoking..." : "Revoke"}
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+      {/* Instructions Modal */}
+      {instructionsProvider && (
+        <InstructionsDialog
+          provider={instructionsProvider}
+          open={!!instructionsProvider}
+          onOpenChange={() => setInstructionsProvider(null)}
+        />
       )}
     </div>
   );

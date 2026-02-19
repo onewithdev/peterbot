@@ -8,6 +8,20 @@ import {
 } from "./repository.js";
 
 /**
+ * Module-level in-memory timestamp of last successful sync.
+ * Reset to null on server restart.
+ */
+let lastSyncedAt: Date | null = null;
+
+/**
+ * Get the timestamp of the last successful sync.
+ * Returns null if no sync has been performed since server startup.
+ */
+export function getLastSyncedAt(): Date | null {
+  return lastSyncedAt;
+}
+
+/**
  * Toolkit slug to Peterbot provider ID mapping.
  * Maps Composio toolkit slugs to our internal provider identifiers.
  */
@@ -48,10 +62,26 @@ export type SyncResult =
   | { error: "not_configured" | "sdk_error"; message: string };
 
 /**
+ * Options for syncing from Composio.
+ */
+export interface SyncFromComposioOptions {
+  /**
+   * Whether to update the `lastSyncedAt` timestamp.
+   * Set to `true` for manual syncs (user-initiated) to surface in the UI.
+   * Set to `false` for background syncs to keep the UI showing the last manual sync time.
+   * @default true
+   */
+  updateTimestamp?: boolean;
+}
+
+/**
  * Sync connected accounts from Composio to local DB.
  * Fetches all connected accounts for the entity and updates local state.
  */
-export async function syncFromComposio(): Promise<SyncResult> {
+export async function syncFromComposio(
+  options: SyncFromComposioOptions = {}
+): Promise<SyncResult> {
+  const { updateTimestamp = true } = options;
   if (!isConfigured()) {
     return {
       error: "not_configured",
@@ -127,6 +157,11 @@ export async function syncFromComposio(): Promise<SyncResult> {
         await removeConnection(undefined, dbApp.provider);
         removed.push(dbApp.provider);
       }
+    }
+
+    // Update last synced timestamp on successful completion (only for manual syncs)
+    if (updateTimestamp) {
+      lastSyncedAt = new Date();
     }
 
     return { added, removed, unchanged };

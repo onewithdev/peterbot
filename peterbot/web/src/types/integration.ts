@@ -15,9 +15,14 @@ export interface ApiProvider {
   icon: string;
   connected: boolean;
   app: ApiConnectedApp | null;
+  required: boolean;
+  category: string;
+  description: string;
+  enabled: boolean;
 }
 
 export interface IntegrationsResponse {
   configured: boolean;
   providers: ApiProvider[];
+  lastSyncedAt: string | null;
 }

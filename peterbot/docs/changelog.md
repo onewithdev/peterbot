@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-02-19 — Integration Dashboard Sync
+
+**Integrations**: Migrated from OAuth-initiation model to Composio dashboard-sync:
+- Removed OAuth connect/callback endpoints and revoke endpoint
+- Added `POST /integrations/sync` endpoint for manual sync from Composio
+- Added hourly background sync loop (`syncLoop` in worker)
+- Added `lastSyncedAt` timestamp displayed in the UI
+- New workflow: connect accounts in Composio Dashboard → return to peterbot → click "Sync from Composio"
+- Connected providers now show "Manage in Composio ↗" link instead of revoke action
+
 ## 2026-02-19 — Phase 3: Extensible
 
 - Skills system with drop-in .skill.md files for modular capabilities

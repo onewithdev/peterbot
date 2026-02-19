@@ -5,7 +5,7 @@
  * Runs on a 5-second interval in the server process.
  */
 
-import { readdirSync, statSync, mkdirSync } from "fs";
+import { readdirSync, mkdirSync } from "fs";
 import { join } from "path";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import * as schema from "../../db/schema.js";
