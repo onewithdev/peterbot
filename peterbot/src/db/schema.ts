@@ -15,6 +15,9 @@ export * from "../features/solutions/schema";
 // Chat feature
 export * from "../features/chat/schema";
 
+// Skills feature
+export * from "../features/skills/schema";
+
 // Future feature slices (placeholders):
 // export * from "../features/memory/schema";
 // export * from "../features/users/schema";

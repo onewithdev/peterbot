@@ -31,7 +31,8 @@ export function createTestDb(): BunSQLiteDatabase<typeof schema> {
       updated_at INTEGER NOT NULL,
       retry_count INTEGER NOT NULL DEFAULT 0,
       schedule_id TEXT,
-      delivered INTEGER NOT NULL DEFAULT 0
+      delivered INTEGER NOT NULL DEFAULT 0,
+      skill_system_prompt TEXT
     )
   `);
 

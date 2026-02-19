@@ -12,6 +12,7 @@ export const jobs = sqliteTable("jobs", {
   output: text("output"),
   chatId: text("chat_id").notNull(),
   scheduleId: text("schedule_id"),
+  skillSystemPrompt: text("skill_system_prompt"),
   delivered: integer("delivered", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()

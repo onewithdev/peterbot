@@ -15,6 +15,7 @@ export async function createJob(
       input: input.input,
       chatId: input.chatId,
       scheduleId: input.scheduleId,
+      skillSystemPrompt: input.skillSystemPrompt,
     })
     .returning();
 

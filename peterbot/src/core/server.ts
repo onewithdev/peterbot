@@ -25,6 +25,8 @@ import { getBot } from "./telegram/bot.js";
 import { config } from "../shared/config.js";
 import { dashboardApp } from "./dashboard/routes.js";
 import { serveStatic } from "hono/bun";
+import { startSkillsPoller } from "../features/skills/loader.js";
+import { db } from "../db/index.js";
 
 /**
  * Server port from centralized config.
@@ -213,6 +215,19 @@ async function boot(): Promise<void> {
 
   // Start worker first (non-blocking)
   startWorker();
+
+  // Start skills poller (non-blocking)
+  const stopSkillsPoller = startSkillsPoller(db);
+
+  // Handle graceful shutdown
+  const shutdown = () => {
+    console.log("[core] Shutting down gracefully...");
+    stopSkillsPoller();
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 
   // Start bot (this will block with long-polling)
   await startBot();

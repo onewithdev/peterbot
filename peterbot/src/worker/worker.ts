@@ -82,7 +82,7 @@ const TELEGRAM_BOT_TOKEN = config.telegramBotToken;
  *
  * @returns System prompt string for the AI model
  */
-export async function buildSystemPrompt(chatId?: string): Promise<string> {
+export async function buildSystemPrompt(chatId?: string, skillSystemPrompt?: string): Promise<string> {
   const today = new Date().toDateString();
 
   // Read configuration files
@@ -134,6 +134,16 @@ export async function buildSystemPrompt(chatId?: string): Promise<string> {
     "When given computational tasks (data analysis, calculations, file creation, etc.),",
     "use the runCode tool to execute Python code in a secure sandbox environment."
   );
+
+  // Add active skill system prompt if present
+  if (skillSystemPrompt) {
+    sections.push(
+      "",
+      "=== ACTIVE SKILL ===",
+      "",
+      skillSystemPrompt
+    );
+  }
 
   // Add soul content if available
   if (soulContent) {
@@ -458,7 +468,7 @@ async function processJob(job: Job): Promise<void> {
 
   try {
     // Build system prompt (now async to read config files)
-    const systemPrompt = await buildSystemPrompt(job.chatId);
+    const systemPrompt = await buildSystemPrompt(job.chatId, job.skillSystemPrompt ?? undefined);
 
     // Determine if this task needs code execution tools
     const tools = shouldUseE2B(job.input) ? peterbotTools : undefined;

@@ -48,6 +48,12 @@ import {
   deleteSolution,
   getSolutionById,
 } from "../../features/solutions/repository.js";
+import {
+  getAllSkills,
+  toggleSkill,
+  getSkillById,
+} from "../../features/skills/repository.js";
+import { scanSkillsOnce } from "../../features/skills/loader.js";
 import { chatRoutes } from "./chat-routes.js";
 import {
   parseNaturalSchedule,
@@ -81,6 +87,13 @@ const ConfigKeyParamSchema = z.object({
  * Solution ID parameter schema for routes with :id.
  */
 const SolutionIdParamSchema = z.object({
+  id: z.string().uuid(),
+});
+
+/**
+ * Skill ID parameter schema for routes with :id.
+ */
+const SkillIdParamSchema = z.object({
   id: z.string().uuid(),
 });
 
@@ -693,6 +706,70 @@ const app = new Hono()
       }
 
       await deleteSolution(undefined, id);
+      return c.json({ success: true });
+    }
+  )
+
+  // ==========================================================================
+  // Skills API (Protected)
+  // ==========================================================================
+
+  /**
+   * GET /api/skills
+   * List all skills.
+   */
+  .get("/skills", passwordAuth, async (c) => {
+    const skills = await getAllSkills(undefined);
+    return c.json({
+      skills,
+      total: skills.length,
+    });
+  })
+
+  /**
+   * POST /api/skills/sync
+   * Trigger a manual sync of skills from disk.
+   */
+  .post("/skills/sync", passwordAuth, async (c) => {
+    const result = await scanSkillsOnce(undefined);
+    return c.json({
+      success: true,
+      synced: result.synced,
+      errors: result.errors,
+    });
+  })
+
+  /**
+   * PATCH /api/skills/:id/toggle
+   * Enable or disable a skill.
+   */
+  .patch(
+    "/skills/:id/toggle",
+    passwordAuth,
+    zValidator("param", SkillIdParamSchema),
+    zValidator(
+      "json",
+      z.object({
+        enabled: z.boolean(),
+      })
+    ),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { enabled } = c.req.valid("json");
+
+      // Check if skill exists
+      const skill = await getSkillById(undefined, id);
+      if (!skill) {
+        return c.json(
+          {
+            error: "Not Found",
+            message: `Skill ${id} not found`,
+          },
+          404
+        );
+      }
+
+      await toggleSkill(undefined, id, enabled);
       return c.json({ success: true });
     }
   )

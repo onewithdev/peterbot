@@ -33,6 +33,8 @@ import {
   isCallbackExpired,
 } from "./buttons.js";
 import { saveMessage } from "../../features/chat/repository.js";
+import { getEnabledSkills } from "../../features/skills/repository.js";
+import type { Skill } from "../../features/skills/schema.js";
 
 /**
  * Safely save a message to the database without throwing.
@@ -236,6 +238,49 @@ function formatSolutionsList(solutions: Solution[]): string {
   });
 
   return `📚 *Your solutions (${solutions.length}):*\n\n` + lines.join("\n");
+}
+
+/**
+ * Format a list of skills.
+ *
+ * @param skills - Array of skills to format
+ * @returns Formatted skills list message
+ */
+function formatSkillsList(skills: Skill[]): string {
+  if (skills.length === 0) {
+    return (
+      `⚡ *Active Skills*\n\n` +
+      `No active skills loaded.`
+    );
+  }
+
+  const lines = skills.map((s) => {
+    return `• *${s.name}* (${s.category}): \`${s.triggerPattern}\``;
+  });
+
+  return `⚡ *Active Skills (${skills.length}):*\n\n` + lines.join("\n");
+}
+
+/**
+ * Find a matching skill for the given text.
+ *
+ * @param skills - Array of enabled skills
+ * @param text - The text to match against
+ * @returns The matched skill's system prompt, or null if no match
+ */
+function findMatchingSkill(skills: Skill[], text: string): string | null {
+  for (const skill of skills) {
+    try {
+      const regex = new RegExp(skill.triggerPattern, "i");
+      if (regex.test(text)) {
+        return skill.systemPrompt;
+      }
+    } catch {
+      // Invalid regex, skip this skill
+      continue;
+    }
+  }
+  return null;
 }
 
 /**
@@ -799,6 +844,31 @@ Use /status to see what I'm working on.`;
     }).catch(() => {});
   });
 
+  // Command: /skills
+  bot.command("skills", async (ctx) => {
+    const chatId = ctx.chat.id.toString();
+
+    // Save user message (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "in",
+      content: "/skills",
+      sender: "user",
+    }).catch(() => {});
+
+    const enabledSkills = await getEnabledSkills(db);
+    const response = formatSkillsList(enabledSkills);
+    await ctx.reply(response, { parse_mode: "Markdown" });
+
+    // Save bot response (fire-and-forget, errors logged only)
+    safeSaveMessage({
+      chatId,
+      direction: "out",
+      content: response,
+      sender: "bot",
+    }).catch(() => {});
+  });
+
   // Main message handler
   bot.on("message:text", async (ctx) => {
     const text = ctx.message.text;
@@ -1138,6 +1208,10 @@ Use /status to see what I'm working on.`;
       return;
     }
 
+    // Check for skill trigger matches
+    const enabledSkills = await getEnabledSkills(db);
+    const matchedSkillPrompt = findMatchingSkill(enabledSkills, text);
+
     // Normal flow: intent detection
     const intent = detectIntent(text);
 
@@ -1146,10 +1220,16 @@ Use /status to see what I'm working on.`;
       try {
         await ctx.replyWithChatAction("typing");
 
+        // Build system prompt with skill context if matched
+        let systemPrompt =
+          "You are peterbot, a helpful personal AI assistant. Answer concisely and directly.";
+        if (matchedSkillPrompt) {
+          systemPrompt += "\n\n=== ACTIVE SKILL ===\n" + matchedSkillPrompt;
+        }
+
         const { text: response } = await generateText({
           model: getModel(),
-          system:
-            "You are peterbot, a helpful personal AI assistant. Answer concisely and directly.",
+          system: systemPrompt,
           prompt: text,
         });
 
@@ -1182,6 +1262,7 @@ Use /status to see what I'm working on.`;
         type: "task",
         input: text,
         chatId,
+        skillSystemPrompt: matchedSkillPrompt,
       });
 
       const ackReply = formatAckReply(job.id);

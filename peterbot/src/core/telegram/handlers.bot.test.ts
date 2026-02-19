@@ -151,6 +151,31 @@ mock.module("../../features/chat/repository.js", () => ({
   getMessagesBefore: mock(async () => []),
 }));
 
+// Mock skills repository
+mock.module("../../features/skills/repository.js", () => ({
+  getEnabledSkills: mock(async () => []),
+  getSkillByName: mock(async () => undefined),
+  createSkill: mock(async (input: unknown) => ({
+    id: "skill-1234-e29b-41d4-a716-446655440000",
+    name: (input as { name: string }).name,
+    description: "Test skill",
+    systemPrompt: "Test system prompt",
+    enabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  })),
+  updateSkill: mock(async () => ({
+    id: "skill-1234-e29b-41d4-a716-446655440000",
+    name: "test-skill",
+    description: "Test skill",
+    systemPrompt: "Test system prompt",
+    enabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  })),
+  deleteSkill: mock(async () => undefined),
+}));
+
 // Import setupHandlers dynamically after mocks are set up
 // We use type-only import for the type, then dynamic import for the actual function
 import type { setupHandlers as SetupHandlersType } from "./handlers";
@@ -603,6 +628,7 @@ describe("bot-level harness tests", () => {
           type: "task",
           input: "Research artificial intelligence after expiry",
           chatId: "12345",
+          skillSystemPrompt: null,
         });
 
         // Should send the acknowledgment for a new job
@@ -715,6 +741,7 @@ describe("bot-level harness tests", () => {
         type: "task",
         input: "Research artificial intelligence",
         chatId: "12345",
+        skillSystemPrompt: null,
       });
       
       const payload = sendMessageCalls[0].payload as any;

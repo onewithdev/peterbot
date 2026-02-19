@@ -25,3 +25,5 @@ I have to be upfront with you: using a regex blacklist to secure shell execution
 
 mastra agents
 approvals or human in the loop section
+
+integrations instead of env
