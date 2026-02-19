@@ -55,6 +55,7 @@ import {
 } from "../../features/skills/repository.js";
 import { scanSkillsOnce } from "../../features/skills/loader.js";
 import { chatRoutes } from "./chat-routes.js";
+import { integrationsRoutes } from "./integrations-routes.js";
 import {
   parseNaturalSchedule,
   calculateNextRun,
@@ -778,7 +779,13 @@ const app = new Hono()
   // Chat API (Protected)
   // ==========================================================================
 
-  .route("/chat", chatRoutes);
+  .route("/chat", chatRoutes)
+
+  // ==========================================================================
+  // Integrations API (Protected)
+  // ==========================================================================
+
+  .route("/integrations", integrationsRoutes);
 
 // ============================================================================
 // Exports

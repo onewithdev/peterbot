@@ -97,7 +97,8 @@ plt.savefig('chart.png')
     test("contains only expected tools", () => {
       const toolNames = Object.keys(peterbotTools);
       expect(toolNames).toContain("runCode");
-      expect(toolNames).toHaveLength(1);
+      expect(toolNames).toContain("executeComposioAction");
+      expect(toolNames).toHaveLength(2);
     });
   });
 });

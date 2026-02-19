@@ -145,4 +145,11 @@ export const config = {
   get dashboardPassword(): string {
     return requireEnv("DASHBOARD_PASSWORD");
   },
+
+  /**
+   * Composio API Key for external app integrations.
+   * Optional - only needed for OAuth integrations via Composio.
+   * Get yours at: https://composio.dev
+   */
+  composioApiKey: getOptionalEnv("COMPOSIO_API_KEY", ""),
 } as const;
