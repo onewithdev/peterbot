@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useBlocker } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -64,6 +65,12 @@ export function SoulTab() {
   });
 
   const hasChanges = data && editedContent !== data.content;
+
+  const blocker = useBlocker({
+    shouldBlockFn: () => !!hasChanges,
+    withResolver: true,
+    enableBeforeUnload: false,
+  });
 
   return (
     <TooltipProvider>
@@ -156,6 +163,42 @@ export function SoulTab() {
                 disabled={saveMutation.isPending}
               >
                 {saveMutation.isPending ? "Saving..." : "Confirm Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Unsaved Changes Navigation Guard */}
+        <Dialog
+          open={blocker.status === "blocked"}
+          onOpenChange={() => blocker.reset?.()}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Unsaved Changes</DialogTitle>
+              <DialogDescription>
+                You have unsaved changes. What would you like to do?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => blocker.reset?.()}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={() => blocker.proceed?.()}>
+                Discard &amp; Leave
+              </Button>
+              <Button
+                onClick={async () => {
+                  try {
+                    await saveMutation.mutateAsync(editedContent);
+                    blocker.proceed?.();
+                  } catch {
+                    blocker.reset?.();
+                  }
+                }}
+                disabled={saveMutation.isPending}
+              >
+                {saveMutation.isPending ? "Saving..." : "Save & Leave"}
               </Button>
             </DialogFooter>
           </DialogContent>
