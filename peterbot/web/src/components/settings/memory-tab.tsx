@@ -514,9 +514,9 @@ export function MemoryTab() {
                   blocker.reset?.();
                 }
               }}
-              disabled={isSaving}
+              disabled={saveMemoryMutation.isPending}
             >
-              {isSaving ? "Saving..." : "Save & Leave"}
+              {saveMemoryMutation.isPending ? "Saving..." : "Save & Leave"}
             </Button>
           </DialogFooter>
         </DialogContent>
