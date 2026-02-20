@@ -51,7 +51,7 @@ const INLINE_TIMEOUT_MS = 30000;
 export async function processMessage(
   input: ProcessMessageInput
 ): Promise<ProcessMessageResult> {
-  const { message, chatId } = input;
+  const { message, chatId, source } = input;
 
   // 1. Read config for agent model selection
   const modelConfig = await getConfig(defaultDb, "agent.model");
@@ -67,13 +67,15 @@ export async function processMessage(
     content: msg.content,
   }));
 
-  // 4. Save user message
-  await saveMessage(defaultDb, {
-    chatId,
-    direction: "in",
-    content: message,
-    sender: "user",
-  });
+  // 4. Save user message (skip for web source - already saved by route)
+  if (source !== "web") {
+    await saveMessage(defaultDb, {
+      chatId,
+      direction: "in",
+      content: message,
+      sender: "user",
+    });
+  }
 
   // 5. Build system prompt
   const systemPrompt = await buildSystemPrompt(chatId);
@@ -94,7 +96,10 @@ export async function processMessage(
       generateText({
         model,
         system: systemPrompt,
-        messages: [...history, { role: "user" as const, content: message }],
+        messages:
+          source === "web"
+            ? history
+            : [...history, { role: "user" as const, content: message }],
         tools,
         maxSteps: 10,
       }),
@@ -140,14 +145,16 @@ export async function processMessage(
     }
   }
 
-  // 8. Save assistant message
-  await saveMessage(defaultDb, {
-    chatId,
-    direction: "out",
-    content,
-    sender: "bot",
-    jobId,
-  });
+  // 8. Save assistant message (skip for web source - route will save it)
+  if (source !== "web") {
+    await saveMessage(defaultDb, {
+      chatId,
+      direction: "out",
+      content,
+      sender: "bot",
+      jobId,
+    });
+  }
 
   // 9. Return result
   return {

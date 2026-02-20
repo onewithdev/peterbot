@@ -16,6 +16,7 @@ function SettingsLayout() {
     { path: "/settings/memory", label: "Memory" },
     { path: "/settings/blocklist", label: "Blocklist" },
     { path: "/settings/compaction", label: "Compaction" },
+    { path: "/settings/agent", label: "Agent" },
   ];
 
   // Base tab styles

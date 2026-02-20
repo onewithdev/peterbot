@@ -136,6 +136,9 @@ const app = new Hono()
       composio: {
         configured: isComposioConfigured(),
       },
+      googleApiKeyConfigured: !!process.env.GOOGLE_API_KEY,
+      zaiApiKeyConfigured: !!process.env.ZAI_API_KEY,
+      moonshotApiKeyConfigured: !!process.env.MOONSHOT_API_KEY,
       timestamp: Date.now(),
     });
   })
