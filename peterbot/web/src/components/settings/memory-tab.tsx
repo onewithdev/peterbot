@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useBlocker } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -204,6 +205,12 @@ export function MemoryTab() {
   });
 
   const hasChanges = memoryData && editedContent !== memoryData.content;
+
+  const blocker = useBlocker({
+    shouldBlockFn: () => !!hasChanges,
+    withResolver: true,
+    enableBeforeUnload: false,
+  });
 
   const handleSave = () => {
     setShowDialog(true);
@@ -478,6 +485,42 @@ export function MemoryTab() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Unsaved Changes Navigation Guard */}
+      <Dialog
+        open={blocker.status === "blocked"}
+        onOpenChange={() => blocker.reset?.()}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes. What would you like to do?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => blocker.reset?.()}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => blocker.proceed?.()}>
+              Discard &amp; Leave
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  await saveMemoryMutation.mutateAsync(editedContent);
+                  blocker.proceed?.();
+                } catch {
+                  blocker.reset?.();
+                }
+              }}
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving..." : "Save & Leave"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
