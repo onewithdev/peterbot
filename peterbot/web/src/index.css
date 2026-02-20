@@ -124,3 +124,193 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* GitHub-like Markdown Styles */
+.github-markdown {
+  --color-canvas-default: transparent;
+  --color-canvas-subtle: var(--muted);
+  --color-border-default: var(--border);
+  --color-border-muted: var(--border);
+  --color-neutral-muted: var(--muted);
+  --color-accent-fg: var(--primary);
+  --color-accent-emphasis: var(--primary);
+  --color-attention-subtle: oklch(0.97 0.05 80);
+  --color-danger-fg: oklch(0.577 0.245 27.325);
+}
+
+.dark .github-markdown {
+  --color-attention-subtle: oklch(0.25 0.05 80);
+}
+
+.github-markdown.prose {
+  color: var(--foreground);
+}
+
+.github-markdown.prose :where(h1):not(:where([class~="not-prose"] *)) {
+  font-size: 2em;
+  font-weight: 600;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.5em;
+  margin-top: 0;
+  letter-spacing: -0.025em;
+}
+
+.github-markdown.prose :where(h2):not(:where([class~="not-prose"] *)) {
+  font-size: 1.5em;
+  font-weight: 600;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+  letter-spacing: -0.025em;
+}
+
+.github-markdown.prose :where(h3):not(:where([class~="not-prose"] *)) {
+  font-size: 1.25em;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  letter-spacing: -0.025em;
+}
+
+.github-markdown.prose :where(h4):not(:where([class~="not-prose"] *)) {
+  font-size: 1em;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.github-markdown.prose :where(h5):not(:where([class~="not-prose"] *)) {
+  font-size: 0.875em;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.github-markdown.prose :where(h6):not(:where([class~="not-prose"] *)) {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.github-markdown.prose :where(p):not(:where([class~="not-prose"] *)) {
+  margin-top: 0;
+  margin-bottom: 1em;
+  line-height: 1.7;
+}
+
+.github-markdown.prose :where(a):not(:where([class~="not-prose"] *)) {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.github-markdown.prose :where(a):not(:where([class~="not-prose"] *)):hover {
+  text-decoration: underline;
+}
+
+.github-markdown.prose :where(ul):not(:where([class~="not-prose"] *)) {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.github-markdown.prose :where(ol):not(:where([class~="not-prose"] *)) {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.github-markdown.prose :where(li):not(:where([class~="not-prose"] *)) {
+  margin-bottom: 0.25em;
+}
+
+.github-markdown.prose :where(li > ul):not(:where([class~="not-prose"] *)),
+.github-markdown.prose :where(li > ol):not(:where([class~="not-prose"] *)) {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+}
+
+.github-markdown.prose :where(blockquote):not(:where([class~="not-prose"] *)) {
+  border-left: 4px solid var(--border);
+  padding-left: 1em;
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 1em;
+  color: var(--muted-foreground);
+  font-style: normal;
+}
+
+.github-markdown.prose :where(blockquote > p):not(:where([class~="not-prose"] *)) {
+  margin-bottom: 0;
+}
+
+.github-markdown.prose :where(code):not(:where([class~="not-prose"] *)) {
+  background-color: var(--muted);
+  border-radius: 6px;
+  padding: 0.2em 0.4em;
+  font-size: 0.85em;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--foreground);
+}
+
+.github-markdown.prose :where(pre):not(:where([class~="not-prose"] *)) {
+  background-color: var(--muted);
+  border-radius: 8px;
+  padding: 1em;
+  overflow-x: auto;
+  margin-bottom: 1em;
+  border: 1px solid var(--border);
+}
+
+.github-markdown.prose :where(pre code):not(:where([class~="not-prose"] *)) {
+  background-color: transparent;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0.9em;
+  color: inherit;
+  word-break: normal;
+  white-space: pre;
+}
+
+.github-markdown.prose :where(hr):not(:where([class~="not-prose"] *)) {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.5em 0;
+}
+
+.github-markdown.prose :where(table):not(:where([class~="not-prose"] *)) {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 1em;
+  display: block;
+  overflow-x: auto;
+}
+
+.github-markdown.prose :where(thead):not(:where([class~="not-prose"] *)) {
+  border-bottom: 2px solid var(--border);
+}
+
+.github-markdown.prose :where(th):not(:where([class~="not-prose"] *)) {
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5em 1em;
+}
+
+.github-markdown.prose :where(td):not(:where([class~="not-prose"] *)) {
+  padding: 0.5em 1em;
+  border-bottom: 1px solid var(--border);
+}
+
+.github-markdown.prose :where(tr:nth-child(2n)):not(:where([class~="not-prose"] *)) {
+  background-color: var(--muted);
+}
+
+.github-markdown.prose :where(img):not(:where([class~="not-prose"] *)) {
+  max-width: 100%;
+  box-sizing: content-box;
+  border-radius: 6px;
+}

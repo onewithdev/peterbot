@@ -38,7 +38,7 @@ import {
   deleteSchedule,
   toggleSchedule,
   getScheduleById,
-} from "../../features/cron/repository.js";
+} from "../../features/jobs/schedules/repository.js";
 import {
   getAllSessions,
   getConfig,
@@ -48,7 +48,7 @@ import {
   getAllSolutions,
   deleteSolution,
   getSolutionById,
-} from "../../features/solutions/repository.js";
+} from "../../features/jobs/solutions/repository.js";
 import {
   getAllSkills,
   toggleSkill,
@@ -66,8 +66,9 @@ import {
 import {
   parseNaturalSchedule,
   calculateNextRun,
-} from "../../features/cron/natural-parser.js";
+} from "../../features/jobs/schedules/natural-parser.js";
 import { config } from "../../shared/config.js";
+import { isConfigured as isComposioConfigured } from "../../features/integrations/service.js";
 import { executeInSession, resetSession } from "./console.js";
 
 /**
@@ -117,6 +118,25 @@ const app = new Hono()
       status: "ok",
       name: "peterbot",
       ts: Date.now(),
+    });
+  })
+
+  // ==========================================================================
+  // System Status (Protected)
+  // ==========================================================================
+  .get("/status", passwordAuth, (c) => {
+    return c.json({
+      telegram: {
+        connected: true,
+        botTokenConfigured: !!config.telegramBotToken,
+      },
+      worker: {
+        running: true,
+      },
+      composio: {
+        configured: isComposioConfigured(),
+      },
+      timestamp: Date.now(),
     });
   })
 

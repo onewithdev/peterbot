@@ -1,5 +1,7 @@
 import { generateText } from "ai";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { mkdir, writeFile } from "fs/promises";
+import { join } from "path";
 import * as schema from "../../db/schema.js";
 import { getModel } from "../../ai/client.js";
 import { executeAction } from "../integrations/service.js";
@@ -298,6 +300,233 @@ export async function refreshDocumentByName(
     document: updatedDoc ?? document,
     success: result.success,
     error: result.error,
+  };
+}
+
+/**
+ * Find or create the "peterbot" folder in Google Drive.
+ * Uses available Google Drive actions through Composio.
+ */
+async function findOrCreatePeterbotFolder(): Promise<{ folderId: string; error: string | null }> {
+  try {
+    // First, try to search for existing "peterbot" folder
+    try {
+      const searchResult = await executeAction("google_drive", "GOOGLEDRIVE_SEARCH_FILE", {
+        query: "name='peterbot' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+      });
+      
+      if (!("error" in searchResult) && searchResult.data) {
+        const files = (searchResult.data as { files?: Array<{ id: string; name: string }> })?.files;
+        if (files && files.length > 0) {
+          console.log("[findOrCreatePeterbotFolder] Found existing folder:", files[0]?.id);
+          return { folderId: files[0]!.id, error: null };
+        }
+      }
+    } catch (e) {
+      console.log("[findOrCreatePeterbotFolder] Search failed, will try to create:", e);
+    }
+
+    // Try different action names that might be available for folder creation
+    // Based on Composio docs, folder creation uses similar structure to file upload
+    const possibleActions = [
+      { 
+        name: "GOOGLEDRIVE_CREATE_FOLDER", 
+        params: {
+          name: "peterbot",
+          mime_type: "application/vnd.google-apps.folder",
+          parent_folder: "root",
+        }
+      },
+      { 
+        name: "GOOGLEDRIVE_CREATE_FILE",  
+        params: {
+          name: "peterbot",
+          mimeType: "application/vnd.google-apps.folder",
+          folder_to_upload_to: "root",
+        }
+      },
+    ];
+    
+    let lastError = null;
+    for (const action of possibleActions) {
+      try {
+        console.log(`[findOrCreatePeterbotFolder] Trying action: ${action.name}`);
+        const result = await executeAction("google_drive", action.name, action.params);
+
+        if ("error" in result) {
+          lastError = result.message;
+          // If action not found, try next
+          if (result.message.includes("not found") || result.message.includes("Unable to retrieve tool")) {
+            console.log(`[findOrCreatePeterbotFolder] Action ${action.name} not found, trying next...`);
+            continue;
+          }
+          return { folderId: "", error: result.message };
+        }
+
+        const responseData = result.data as { id?: string; fileId?: string; data?: { id?: string } };
+        const folderId = responseData?.id || responseData?.fileId || responseData?.data?.id;
+        
+        if (!folderId) {
+          return { folderId: "", error: "Failed to get folder ID after creation" };
+        }
+
+        console.log(`[findOrCreatePeterbotFolder] Created folder with ID: ${folderId}`);
+        return { folderId, error: null };
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : String(e);
+        console.error(`[findOrCreatePeterbotFolder] Exception with action ${action.name}:`, lastError);
+        // Continue to try next action
+      }
+    }
+
+    return { folderId: "", error: lastError || "No available Google Drive folder creation action found" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { folderId: "", error: message };
+  }
+}
+
+export interface UploadResult {
+  document: DocumentReference;
+  driveFileId: string | null;
+  driveError: string | null;
+}
+
+/**
+ * Upload a file to Google Drive and create a document record.
+ * Stores the file in the "peterbot" folder.
+ */
+export async function uploadDocument(
+  db: BunSQLiteDatabase<typeof schema> | undefined,
+  data: {
+    name: string;
+    file: File;
+    content: string | null;
+  }
+): Promise<UploadResult> {
+  // First, find or create the peterbot folder
+  const { folderId, error: folderError } = await findOrCreatePeterbotFolder();
+  
+  if (folderError) {
+    console.error("[uploadDocument] Failed to find/create peterbot folder:", folderError);
+  }
+
+  let driveFileId: string | null = null;
+  let driveError: string | null = null;
+
+  // Try to upload to Google Drive if we have a valid folder
+  if (folderId) {
+    try {
+      // Read file content as base64 for upload
+      const arrayBuffer = await data.file.arrayBuffer();
+      const base64Content = Buffer.from(arrayBuffer).toString("base64");
+
+      // Try different possible action names with correct parameter format
+      // Based on Composio docs, the upload action expects:
+      // - file_to_upload: object with name, mimeType, and data (base64)
+      // - folder_to_upload_to: string (folder ID)
+      const possibleUploadActions = [
+        { name: "GOOGLEDRIVE_UPLOAD_FILE", params: {
+          file_to_upload: {
+            name: data.file.name,
+            mimeType: data.file.type || "application/octet-stream",
+            data: base64Content,
+          },
+          folder_to_upload_to: folderId,
+        }},
+        { name: "GOOGLEDRIVE_CREATE_FILE", params: {
+          file_to_upload: {
+            name: data.file.name,
+            mimeType: data.file.type || "application/octet-stream",
+            data: base64Content,
+          },
+          folder_to_upload_to: folderId,
+        }},
+      ];
+      
+      for (const action of possibleUploadActions) {
+        try {
+          console.log(`[uploadDocument] Trying action: ${action.name}`);
+          const uploadResult = await executeAction("google_drive", action.name, action.params);
+
+          if ("error" in uploadResult) {
+            // If action not found, try next
+            if (uploadResult.message.includes("not found") || uploadResult.message.includes("Unable to retrieve tool")) {
+              console.log(`[uploadDocument] Action ${action.name} not found, trying next...`);
+              continue;
+            }
+            driveError = uploadResult.message;
+            console.error("[uploadDocument] Failed to upload to Google Drive:", uploadResult.message);
+          } else {
+            // Extract file ID from response - the response structure varies
+            const responseData = uploadResult.data as { id?: string; fileId?: string; data?: { id?: string } };
+            driveFileId = responseData?.id || responseData?.fileId || responseData?.data?.id || null;
+            driveError = null;
+            console.log(`[uploadDocument] Success with action ${action.name}, fileId: ${driveFileId}`);
+            break; // Success!
+          }
+        } catch (e) {
+          driveError = e instanceof Error ? e.message : String(e);
+          console.error(`[uploadDocument] Exception with action ${action.name}:`, driveError);
+          // Continue to try next action
+        }
+      }
+    } catch (error) {
+      driveError = error instanceof Error ? error.message : String(error);
+      console.error("[uploadDocument] Exception during Google Drive upload:", driveError);
+    }
+  } else {
+    driveError = folderError || "Could not find or create peterbot folder";
+  }
+
+  // If Google Drive upload failed, save file locally as fallback
+  let localPath: string | null = null;
+  if (!driveFileId) {
+    try {
+      // Ensure uploads directory exists
+      const uploadDir = join(process.cwd(), "storage", "uploads");
+      await mkdir(uploadDir, { recursive: true });
+
+      // Save file locally with timestamp prefix to avoid collisions
+      const timestamp = Date.now();
+      const safeFilename = data.file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const filename = `${timestamp}-${safeFilename}`;
+      const filepath = join(uploadDir, filename);
+      
+      const arrayBuffer = await data.file.arrayBuffer();
+      await writeFile(filepath, Buffer.from(arrayBuffer));
+      
+      localPath = filepath;
+      console.log("[uploadDocument] Saved file locally:", filepath);
+    } catch (localError) {
+      console.error("[uploadDocument] Failed to save file locally:", localError);
+    }
+  }
+
+  // Create document record
+  const source = driveFileId 
+    ? `google_drive:${driveFileId}` 
+    : localPath 
+    ? `local:${localPath}` 
+    : `upload:${data.file.name}`;
+
+  const document = await createDocument(db, {
+    name: data.name,
+    source,
+    type: "upload",
+    content: data.content,
+    contentTruncated: false,
+    cachedAt: data.content ? new Date() : null,
+    lastFetchAttemptAt: null,
+    lastFetchError: driveError,
+    summary: null,
+    tags: null,
+  });
+
+  return {
+    document,
+    driveFileId,
+    driveError,
   };
 }
 

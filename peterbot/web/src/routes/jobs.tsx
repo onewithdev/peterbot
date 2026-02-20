@@ -18,6 +18,8 @@ function JobsLayout() {
   const tabs = [
     { path: "/jobs", label: "Job Monitor", exact: true },
     { path: "/jobs/history", label: "Job History" },
+    { path: "/jobs/schedules", label: "Schedules" },
+    { path: "/jobs/solutions", label: "Solutions" },
   ];
 
   // Base tab styles
@@ -30,7 +32,7 @@ function JobsLayout() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
         <p className="text-muted-foreground">
-          Monitor and manage background tasks
+          Monitor and manage background tasks, schedules, and solutions
         </p>
       </div>
 

@@ -41,30 +41,35 @@ export const chatRoutes = new Hono()
       const { since, before, limit } = c.req.valid("query");
       const parsedLimit = limit ? parseInt(limit, 10) : 50;
 
-      let messages;
-      if (since) {
-        messages = await getMessagesSince(
-          undefined,
-          config.telegramChatId,
-          new Date(parseInt(since, 10)),
-          parsedLimit
-        );
-      } else if (before) {
-        messages = await getMessagesBefore(
-          undefined,
-          config.telegramChatId,
-          new Date(parseInt(before, 10)),
-          parsedLimit
-        );
-      } else {
-        messages = await getMessages(
-          undefined,
-          config.telegramChatId,
-          parsedLimit
-        );
-      }
+      try {
+        let messages;
+        if (since) {
+          messages = await getMessagesSince(
+            undefined,
+            config.telegramChatId,
+            new Date(parseInt(since, 10)),
+            parsedLimit
+          );
+        } else if (before) {
+          messages = await getMessagesBefore(
+            undefined,
+            config.telegramChatId,
+            new Date(parseInt(before, 10)),
+            parsedLimit
+          );
+        } else {
+          messages = await getMessages(
+            undefined,
+            config.telegramChatId,
+            parsedLimit
+          );
+        }
 
-      return c.json({ messages });
+        return c.json({ messages });
+      } catch (err) {
+        console.error("[chat] GET /messages error:", err);
+        return c.json({ error: "Internal Server Error", message: String(err) }, 500);
+      }
     }
   )
 

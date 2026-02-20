@@ -1,7 +1,7 @@
 import { eq, desc } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { db as defaultDb } from "../../db/index.js";
-import * as schema from "../../db/schema.js";
+import { db as defaultDb } from "../../../db/index.js";
+import * as schema from "../../../db/schema.js";
 import { solutions } from "./schema.js";
 import type { Solution, NewSolution } from "./schema.js";
 

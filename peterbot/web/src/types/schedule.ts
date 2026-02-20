@@ -1,4 +1,4 @@
-import type { Schedule as ScheduleSchema } from '../../../src/features/cron/schema'
+import type { Schedule as ScheduleSchema } from '../../../src/features/jobs/schedules/schema'
 
 // Schedule type from the database schema (with Date objects)
 export type Schedule = ScheduleSchema

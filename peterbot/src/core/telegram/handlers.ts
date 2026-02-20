@@ -2,6 +2,8 @@ import { Bot } from "grammy";
 import { generateText } from "ai";
 import { detectIntent } from "./intent";
 import { db } from "../../db";
+import { processMessage } from "../../features/agent/engine.js";
+import { getConfig } from "../../features/compaction/repository.js";
 import {
   createJob,
   getJobsByChatId,
@@ -11,20 +13,20 @@ import {
   getAllSchedules,
   createSchedule,
   deleteSchedule,
-} from "../../features/cron/repository";
+} from "../../features/jobs/schedules/repository";
 import {
   parseNaturalSchedule,
   calculateNextRun,
-} from "../../features/cron/natural-parser";
+} from "../../features/jobs/schedules/natural-parser";
 import { formatJobsForStatus } from "../../features/jobs/service";
 import { getModel } from "../../ai/client";
 import { config } from "../../shared/config.js";
 import type { Job } from "../../features/jobs/schema";
-import type { Schedule } from "../../features/cron/schema";
-import { findSimilarSolutions } from "../../features/solutions/similarity";
-import { autoTagSolution, buildKeywords } from "../../features/solutions/service";
-import { createSolution, getAllSolutions } from "../../features/solutions/repository";
-import type { Solution } from "../../features/solutions/schema";
+import type { Schedule } from "../../features/jobs/schedules/schema";
+import { findSimilarSolutions } from "../../features/jobs/solutions/similarity";
+import { autoTagSolution, buildKeywords } from "../../features/jobs/solutions/service";
+import { createSolution, getAllSolutions } from "../../features/jobs/solutions/repository";
+import type { Solution } from "../../features/jobs/solutions/schema";
 import {
   getButtonsForContext,
   buildInlineKeyboard,
@@ -363,6 +365,54 @@ export function setupHandlers(bot: Bot): void {
     }
 
     await next();
+  });
+
+  // Agent middleware - intercepts all text messages when agent is enabled
+  bot.use(async (ctx, next) => {
+    // Only handle text messages
+    if (!ctx.message?.text) {
+      await next();
+      return;
+    }
+
+    // Check if agent is enabled
+    const agentEnabled = await getConfig(db, "agent.enabled");
+    if (agentEnabled?.value !== "true") {
+      await next();
+      return;
+    }
+
+    // Ensure chat is available
+    if (!ctx.chat) {
+      await next();
+      return;
+    }
+
+    const chatId = String(ctx.chat.id);
+    const message = ctx.message.text;
+
+    try {
+      // Show typing indicator
+      await ctx.api.sendChatAction(ctx.chat.id, "typing");
+
+      // Process through agent engine
+      const result = await processMessage({
+        message,
+        chatId,
+        source: "telegram",
+      });
+
+      // Build reply text with optional fallback notice
+      let replyText = result.content;
+      if (result.usedFallbackModel) {
+        replyText += `\n\n(Note: ${result.usedFallbackModel})`;
+      }
+
+      await ctx.reply(replyText);
+    } catch (error) {
+      console.error("Agent middleware error:", error);
+      await ctx.reply("Sorry, something went wrong — please try again.");
+    }
   });
 
   // Command: /start

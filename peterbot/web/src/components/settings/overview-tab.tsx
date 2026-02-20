@@ -1,30 +1,131 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Database, Tag } from "lucide-react";
+import { CheckCircle, Database, Tag, Bot, Cpu, Puzzle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+
+interface SystemStatus {
+  telegram: {
+    connected: boolean;
+    botTokenConfigured: boolean;
+  };
+  worker: {
+    running: boolean;
+  };
+  composio: {
+    configured: boolean;
+  };
+  timestamp: number;
+}
 
 export function OverviewTab() {
+  const { data: status, isLoading } = useQuery<SystemStatus>({
+    queryKey: ["system-status"],
+    queryFn: async () => {
+      const response = await api.status.$get();
+      return response.json();
+    },
+  });
+
+  const composioConfigured = status?.composio.configured ?? false;
+
   return (
     <div className="space-y-6">
-      {/* System Status Card */}
+      {/* Health Check Card */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-green-500" />
-            <CardTitle>System Status</CardTitle>
+            <CardTitle>Health Check</CardTitle>
           </div>
           <CardDescription>
             Current operational status of peterbot
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-            </span>
-            <span className="text-sm font-medium">Online</span>
-            <span className="text-sm text-muted-foreground">
-              All systems operational
-            </span>
+          <div className="space-y-4">
+            {/* Online status */}
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+              </span>
+              <span className="text-sm font-medium">Online</span>
+              <span className="text-sm text-muted-foreground">
+                All systems operational
+              </span>
+            </div>
+
+            {/* System Health Section */}
+            <div className="grid gap-4 md:grid-cols-3 pt-2 border-t">
+              {/* Telegram Bot */}
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
+                  <Bot className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Telegram Bot</p>
+                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    {isLoading ? (
+                      <span>Checking...</span>
+                    ) : status?.telegram.connected ? (
+                      <>
+                        <span className="text-green-500">✅</span> Connected
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-red-500">❌</span> Disconnected
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Worker */}
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
+                  <Cpu className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Worker</p>
+                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    {isLoading ? (
+                      <span>Checking...</span>
+                    ) : status?.worker.running ? (
+                      <>
+                        <span className="text-green-500">✅</span> Running
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-red-500">❌</span> Stopped
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Composio */}
+              <div className="flex items-center gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full ${composioConfigured ? 'bg-green-100' : 'bg-amber-100'}`}>
+                  <Puzzle className={`h-5 w-5 ${composioConfigured ? 'text-green-600' : 'text-amber-600'}`} />
+                </div>
+                <div>
+                  <p className="font-medium">Composio</p>
+                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    {isLoading ? (
+                      <span>Checking...</span>
+                    ) : composioConfigured ? (
+                      <>
+                        <span className="text-green-500">✅</span> Configured
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-amber-500">⚠️</span> Not configured
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

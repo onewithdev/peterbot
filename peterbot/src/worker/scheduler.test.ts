@@ -11,11 +11,11 @@ import {
   getDueSchedules,
   toggleSchedule,
   updateScheduleRunTime,
-} from "../features/cron/repository";
+} from "../features/jobs/schedules/repository";
 import { getPendingJobs } from "../features/jobs/repository";
 
 // Import scheduler functions
-import { calculateNextRun } from "../features/cron/natural-parser";
+import { calculateNextRun } from "../features/jobs/schedules/natural-parser";
 
 // Test database instance
 let testDb: BunSQLiteDatabase<typeof schema>;

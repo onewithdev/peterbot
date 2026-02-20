@@ -59,7 +59,7 @@ describe("Natural Parser", () => {
   describe("parseNaturalSchedule()", () => {
     test.skip("returns object with expected shape when AI is available", async () => {
       // This test is skipped because it requires actual AI access
-      // Run manually with: bun test src/features/cron/natural-parser.test.ts --testNamePattern="parseNaturalSchedule"
+      // Run manually with: bun test src/features/jobs/schedules/natural-parser.test.ts --testNamePattern="parseNaturalSchedule"
       const { parseNaturalSchedule } = await import("./natural-parser");
       const result = await parseNaturalSchedule("every Monday at 9am");
 

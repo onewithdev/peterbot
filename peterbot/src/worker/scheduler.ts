@@ -5,9 +5,9 @@ import {
   updateScheduleRunTime,
   getScheduleById,
   toggleSchedule,
-} from "../features/cron/repository.js";
+} from "../features/jobs/schedules/repository.js";
 import { createJob } from "../features/jobs/repository.js";
-import { calculateNextRun } from "../features/cron/natural-parser.js";
+import { calculateNextRun } from "../features/jobs/schedules/natural-parser.js";
 
 /**
  * Scheduler polling interval in milliseconds.

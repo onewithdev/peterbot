@@ -22,9 +22,9 @@ function RootComponent() {
     return <Navigate to="/login" />;
   }
 
-  // Redirect to home if already authenticated and on login page
+  // Redirect to chat if already authenticated and on login page
   if (authenticated && isLoginPage) {
-    return <Navigate to="/" />;
+    return <Navigate to="/chat" />;
   }
 
   // Login page and console page don't have sidebar

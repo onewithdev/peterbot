@@ -1,4 +1,4 @@
-import { eq, and, gt, lt, asc, desc } from "drizzle-orm";
+import { eq, and, gte, lt, asc, desc } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { db as defaultDb } from "../../db/index.js";
 import * as schema from "../../db/schema.js";
@@ -37,7 +37,7 @@ export async function getMessagesSince(
   const results = await db
     .select()
     .from(chatMessages)
-    .where(and(eq(chatMessages.chatId, chatId), gt(chatMessages.createdAt, since)))
+    .where(and(eq(chatMessages.chatId, chatId), gte(chatMessages.createdAt, since)))
     .orderBy(asc(chatMessages.createdAt))
     .limit(limit);
   return results;

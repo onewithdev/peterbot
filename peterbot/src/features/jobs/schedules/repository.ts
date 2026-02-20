@@ -1,7 +1,7 @@
 import { eq, lte, and, desc } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { db as defaultDb } from "../../db";
-import * as schema from "../../db/schema";
+import { db as defaultDb } from "../../../db";
+import * as schema from "../../../db/schema";
 import { schedules, type Schedule, type NewSchedule } from "./schema";
 
 export async function createSchedule(

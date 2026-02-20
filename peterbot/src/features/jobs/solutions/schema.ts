@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
-import { jobs } from "../jobs/schema";
+import { jobs } from "../schema";
 
 export const solutions = sqliteTable("solutions", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),

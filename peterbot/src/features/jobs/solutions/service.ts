@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { getModel } from "../../ai/client.js";
+import { getModel } from "../../../ai/client.js";
 import { extractKeywords } from "./similarity.js";
 
 export async function autoTagSolution(

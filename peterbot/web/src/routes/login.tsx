@@ -20,7 +20,7 @@ function LoginPage() {
   // Redirect if already authenticated
   React.useEffect(() => {
     if (isAuthenticated()) {
-      navigate({ to: "/" });
+      navigate({ to: "/chat" });
     }
   }, [navigate]);
 
@@ -48,7 +48,7 @@ function LoginPage() {
 
       if (data.valid) {
         setPassword(password);
-        navigate({ to: "/" });
+        navigate({ to: "/chat" });
       } else {
         setError("Invalid password");
       }
@@ -57,7 +57,7 @@ function LoginPage() {
       if (import.meta.env.VITE_DEV_AUTH_BYPASS === "true") {
         console.warn("Auth API failed, bypassing auth in dev mode");
         setPassword(password);
-        navigate({ to: "/" });
+        navigate({ to: "/chat" });
         return;
       }
       // Treat request failures as authentication failures

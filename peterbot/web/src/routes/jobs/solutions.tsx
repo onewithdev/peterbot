@@ -4,17 +4,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { BookOpen, Trash2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
 import { formatDate } from "@/lib/utils"
 import type { SolutionsResponse, ApiSolution } from "@/types/solution"
 
-export const Route = createFileRoute("/solutions")({
-  component: SolutionsPage,
+export const Route = createFileRoute("/jobs/solutions")({
+  component: SolutionsTab,
 })
 
-function SolutionsPage() {
+function SolutionsTab() {
   const queryClient = useQueryClient()
 
   // Client-side search state
@@ -120,17 +120,6 @@ function SolutionsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <BookOpen className="h-8 w-8" />
-          Solutions
-        </h1>
-        <p className="text-muted-foreground">
-          View and manage your saved solutions from completed jobs
-        </p>
-      </div>
-
       {/* Search and Filters */}
       <Card>
         <CardContent className="pt-6 space-y-4">

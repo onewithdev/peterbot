@@ -11,7 +11,7 @@ function SettingsLayout() {
   const isExactSettings = location.pathname === "/settings";
 
   const tabs = [
-    { path: "/settings", label: "Overview", exact: true },
+    { path: "/settings", label: "Health Check", exact: true },
     { path: "/settings/soul", label: "Soul" },
     { path: "/settings/memory", label: "Memory" },
     { path: "/settings/blocklist", label: "Blocklist" },

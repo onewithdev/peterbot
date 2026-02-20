@@ -129,4 +129,22 @@ export async function seedDefaultConfig(
       updatedAt: new Date(),
     })
     .onConflictDoNothing();
+
+  await db
+    .insert(config)
+    .values({
+      key: "agent.enabled",
+      value: process.env.USE_AGENT_ENGINE ?? "false",
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
+
+  await db
+    .insert(config)
+    .values({
+      key: "agent.model",
+      value: process.env.AGENT_MODEL ?? "gemini",
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
 }

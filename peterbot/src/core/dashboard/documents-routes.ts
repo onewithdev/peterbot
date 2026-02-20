@@ -1,8 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { mkdir, writeFile } from "fs/promises";
-import { join } from "path";
 import { passwordAuth } from "./auth.js";
 import {
   getAllDocuments,
@@ -10,8 +8,8 @@ import {
   deleteDocument,
   addDocument,
   refreshDocument,
+  uploadDocument,
 } from "../../features/documents/service.js";
-import { createDocument } from "../../features/documents/repository.js";
 
 /**
  * Document ID parameter schema for routes with :id.
@@ -148,12 +146,14 @@ export const documentsRoutes = new Hono()
   )
 
   // ==========================================================================
-  // POST /upload - Upload a local file
+  // POST /upload - Upload a local file to Google Drive
   // ==========================================================================
   .post("/upload", passwordAuth, async (c) => {
     const body = await c.req.parseBody();
     const file = body.file as File;
     const name = (body.name as string) || file?.name;
+
+    console.log("[upload] Received file:", file?.name, "type:", file?.type, "size:", file?.size);
 
     if (!file) {
       return c.json({ error: "No file provided" }, 400);
@@ -169,7 +169,7 @@ export const documentsRoutes = new Hono()
       return c.json({ error: "File too large (max 10MB)" }, 413);
     }
 
-    // Validate file type
+    // Validate file type (allow empty/unknown for text files based on extension)
     const allowedTypes = [
       "text/plain",
       "text/markdown",
@@ -177,44 +177,38 @@ export const documentsRoutes = new Hono()
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ];
-    if (!allowedTypes.includes(file.type)) {
+    
+    // Also check file extension as fallback when type is empty or generic
+    const fileExtension = file.name.split(".").pop()?.toLowerCase();
+    const isAllowedByExtension = ["txt", "md", "pdf", "doc", "docx"].includes(fileExtension || "");
+    
+    if (!allowedTypes.includes(file.type) && !isAllowedByExtension) {
+      console.log("[upload] Invalid file type:", file.type, "extension:", fileExtension);
       return c.json({ error: "Invalid file type" }, 400);
     }
 
     try {
-      // Ensure uploads directory exists
-      const uploadDir = join(process.cwd(), "storage", "uploads");
-      await mkdir(uploadDir, { recursive: true });
-
-      // Save file locally
-      const filename = `${Date.now()}-${file.name}`;
-      const filepath = join(uploadDir, filename);
-      const arrayBuffer = await file.arrayBuffer();
-      await writeFile(filepath, Buffer.from(arrayBuffer));
-
       // Read file content as text (for now, only text files will have extractable content)
       let content: string | null = null;
       if (file.type === "text/plain" || file.type === "text/markdown") {
         content = await file.text();
       }
 
-      // Create document record
-      const document = await createDocument(undefined, {
+      // Upload to Google Drive and create document record
+      const result = await uploadDocument(undefined, {
         name,
-        source: `local:${filepath}`,
-        type: "upload",
+        file,
         content,
-        contentTruncated: false,
-        cachedAt: content ? new Date() : null,
-        lastFetchAttemptAt: null,
-        lastFetchError: null,
-        summary: null,
-        tags: null,
       });
 
-      return c.json({ document }, 201);
+      return c.json({
+        document: result.document,
+        driveFileId: result.driveFileId,
+        driveError: result.driveError,
+      }, result.driveFileId ? 201 : 201);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      console.error("[upload] Error:", message);
       return c.json({ error: "Upload failed", message }, 500);
     }
   });

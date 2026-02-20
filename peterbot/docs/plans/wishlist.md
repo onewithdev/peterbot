@@ -31,3 +31,7 @@ petabot opinionated - composio, google telegram
 
 auto complete (slash commands)
 chat should auto scroll down
+
+rebrand to peetabot - get domain
+
+natural language instead of slash commands

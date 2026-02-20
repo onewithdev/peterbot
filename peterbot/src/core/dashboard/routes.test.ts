@@ -15,7 +15,7 @@ mock.module("../../features/jobs/repository", () => ({
 }));
 
 // Mock the cron repository
-mock.module("../../features/cron/repository", () => ({
+mock.module("../../features/jobs/schedules/repository", () => ({
   getAllSchedules: mock(async () => []),
   createSchedule: mock(async (input: unknown) => ({ id: "sched_123", ...input })),
   deleteSchedule: mock(async () => {}),
@@ -31,7 +31,7 @@ mock.module("../../features/compaction/repository", () => ({
 }));
 
 // Mock the solutions repository
-mock.module("../../features/solutions/repository", () => ({
+mock.module("../../features/jobs/solutions/repository", () => ({
   getAllSolutions: mock(async () => []),
   deleteSolution: mock(async () => {}),
   getSolutionById: mock(async () => undefined),

@@ -1,5 +1,5 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import * as schema from "../../db/schema.js";
+import * as schema from "../../../db/schema.js";
 import { getAllSolutions } from "./repository.js";
 import type { Solution } from "./schema.js";
 

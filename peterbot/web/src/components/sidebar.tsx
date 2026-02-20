@@ -1,13 +1,10 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import {
-  LayoutDashboard,
   Activity,
-  Clock,
   Settings,
   Terminal,
   Bot,
   LogOut,
-  BookOpen,
   MessageSquare,
   Zap,
   Hexagon,
@@ -31,10 +28,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Chat", path: "/chat", icon: MessageSquare },
-  { label: "Overview", path: "/", icon: LayoutDashboard },
   { label: "Jobs", path: "/jobs", icon: Activity },
-  { label: "Schedules", path: "/schedules", icon: Clock },
-  { label: "Solutions", path: "/solutions", icon: BookOpen },
   { label: "Skills", path: "/skills", icon: Zap, isNew: true },
   { label: "Integrations", path: "/integrations", icon: Hexagon, isNew: true },
   { label: "Settings", path: "/settings", icon: Settings },

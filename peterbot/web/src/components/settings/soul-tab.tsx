@@ -89,6 +89,18 @@ export function SoulTab() {
                 <Button
                   variant="outline"
                   size="icon"
+                  onClick={() => setIsPreview(!isPreview)}
+                >
+                  {isPreview ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{isPreview ? "Edit" : "Preview"}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
                   onClick={() => setShowSaveDialog(true)}
                   disabled={!hasChanges || saveMutation.isPending}
                 >
@@ -96,18 +108,6 @@ export function SoulTab() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Save Changes</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setIsPreview(!isPreview)}
-                >
-                  {isPreview ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{isPreview ? "Edit" : "Preview"}</TooltipContent>
             </Tooltip>
           </div>
         </div>
@@ -131,7 +131,7 @@ export function SoulTab() {
                 <p className="text-sm text-muted-foreground">Loading...</p>
               </div>
             ) : isPreview ? (
-              <div className="prose prose-sm dark:prose-invert max-w-none min-h-[400px]">
+              <div className="github-markdown prose prose-sm dark:prose-invert max-w-none min-h-[400px] px-1">
                 <ReactMarkdown>{editedContent || "No content yet"}</ReactMarkdown>
               </div>
             ) : (

@@ -5,17 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { Clock, Trash2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
 import { formatDate } from "@/lib/utils"
 import type { SchedulesResponse, ApiSchedule } from "@/types/schedule"
 
-export const Route = createFileRoute("/schedules")({
-  component: SchedulesPage,
+export const Route = createFileRoute("/jobs/schedules")({
+  component: SchedulesTab,
 })
 
-function SchedulesPage() {
+function SchedulesTab() {
   const queryClient = useQueryClient()
   
   // Form state
@@ -122,17 +122,6 @@ function SchedulesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Clock className="h-8 w-8" />
-          Scheduled Tasks
-        </h1>
-        <p className="text-muted-foreground">
-          Create and manage recurring tasks
-        </p>
-      </div>
-
       {/* New Schedule Card */}
       <Card>
         <CardHeader>

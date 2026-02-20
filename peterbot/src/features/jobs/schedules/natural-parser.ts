@@ -1,7 +1,7 @@
 import { CronExpressionParser } from "cron-parser";
 import { generateObject } from "ai";
 import { z } from "zod";
-import { getModel } from "../../ai/client.js";
+import { getModel } from "../../../ai/client.js";
 
 /**
  * Calculate the next run time for a given cron expression.

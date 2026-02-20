@@ -63,7 +63,7 @@ const mockCreateSchedule = mock(async (_input: unknown) => ({
 const mockDeleteSchedule = mock(async (_id: string) => undefined);
 const mockGetScheduleById = mock(async (_id: string) => undefined);
 
-mock.module("../../features/cron/repository", () => ({
+mock.module("../../features/jobs/schedules/repository", () => ({
   getAllSchedules: mockGetAllSchedules,
   createSchedule: mockCreateSchedule,
   deleteSchedule: mockDeleteSchedule,
@@ -83,7 +83,7 @@ const mockCreateSolution = mock(async (_input: unknown) => ({
   updatedAt: new Date(),
 }));
 
-mock.module("../../features/solutions/repository", () => ({
+mock.module("../../features/jobs/solutions/repository", () => ({
   getAllSolutions: mockGetAllSolutions,
   createSolution: mockCreateSolution,
 }));
@@ -93,7 +93,7 @@ const mockFindSimilarSolutions = mock(async (_db: unknown, _text: string) => [])
 const mockExtractKeywords = mock((_text: string) => []);
 const mockCalculateSimilarity = mock((_text1: string, _text2: string) => 0);
 
-mock.module("../../features/solutions/similarity", () => ({
+mock.module("../../features/jobs/solutions/similarity", () => ({
   findSimilarSolutions: mockFindSimilarSolutions,
   extractKeywords: mockExtractKeywords,
   calculateSimilarity: mockCalculateSimilarity,
@@ -124,7 +124,7 @@ mock.module("../../db", () => ({
 }));
 
 // Mock solutions service
-mock.module("../../features/solutions/service", () => ({
+mock.module("../../features/jobs/solutions/service", () => ({
   autoTagSolution: mock(async () => ({
     title: "Test Solution",
     description: "Test description",

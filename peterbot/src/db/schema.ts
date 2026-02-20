@@ -3,14 +3,14 @@
 // Jobs feature
 export * from "../features/jobs/schema";
 
-// Cron feature
-export * from "../features/cron/schema";
+// Jobs/schedules sub-feature
+export * from "../features/jobs/schedules/schema";
+
+// Jobs/solutions sub-feature  
+export * from "../features/jobs/solutions/schema";
 
 // Compaction feature
 export * from "../features/compaction/schema";
-
-// Solutions feature
-export * from "../features/solutions/schema";
 
 // Chat feature
 export * from "../features/chat/schema";

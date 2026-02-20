@@ -161,8 +161,8 @@ function AboutPage() {
             <p className="text-sm text-muted-foreground">No changelog entries available.</p>
           ) : (
             <div className="space-y-6">
-              {changelog.map((entry) => (
-                <div key={entry.date} className="space-y-2">
+              {changelog.map((entry, index) => (
+                <div key={`${entry.date}-${index}`} className="space-y-2">
                   <h3 className="text-sm font-semibold">
                     {entry.date} — {entry.phase}
                   </h3>
