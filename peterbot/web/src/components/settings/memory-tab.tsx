@@ -13,7 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Brain, Save, FileText, Globe, AlertCircle, RefreshCw, Trash2, Plus, Upload, Link2 } from "lucide-react";
+import { Brain, Save, FileText, Globe, AlertCircle, RefreshCw, Trash2, Plus, Upload, Link2, Eye, Pencil } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import ReactMarkdown from "react-markdown";
 import { FileUpload } from "@/components/documents/file-upload";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -54,6 +56,8 @@ export function MemoryTab() {
   const [showDialog, setShowDialog] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const [isPreview, setIsPreview] = useState(true);
 
   // Documents state
   const [newDocUrl, setNewDocUrl] = useState("");
@@ -254,42 +258,68 @@ export function MemoryTab() {
   return (
     <div className="space-y-6">
       {/* Section A - Memory Editor */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between py-4">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Brain className="h-4 w-4" />
-              Memory Editor
-            </CardTitle>
-            <CardDescription>
-              Edit permanent facts and user preferences
-            </CardDescription>
-          </div>
-          <Button
-            onClick={handleSave}
-            disabled={!hasChanges || isSaving}
-            size="sm"
-            className="gap-2"
-          >
-            <Save className="h-4 w-4" />
-            Save Changes
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {isMemoryLoading ? (
-            <div className="flex h-64 items-center justify-center">
-              <p className="text-sm text-muted-foreground">Loading...</p>
+      <TooltipProvider>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between py-4">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Brain className="h-4 w-4" />
+                {isPreview ? "Memory Preview" : "Memory Editor"}
+              </CardTitle>
+              <CardDescription>
+                {isPreview
+                  ? "Live preview of permanent facts and user preferences"
+                  : "Edit permanent facts and user preferences"}
+              </CardDescription>
             </div>
-          ) : (
-            <Textarea
-              value={editedContent}
-              onChange={(e) => setEditedContent(e.target.value)}
-              className="min-h-[200px] resize-none font-mono text-sm"
-              placeholder="Enter memory facts..."
-            />
-          )}
-        </CardContent>
-      </Card>
+            <div className="flex items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleSave}
+                    disabled={!hasChanges || isSaving}
+                  >
+                    <Save className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Save Changes</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setIsPreview(!isPreview)}
+                  >
+                    {isPreview ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isPreview ? "Edit" : "Preview"}</TooltipContent>
+              </Tooltip>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isMemoryLoading ? (
+              <div className="flex h-64 items-center justify-center">
+                <p className="text-sm text-muted-foreground">Loading...</p>
+              </div>
+            ) : isPreview ? (
+              <div className="prose prose-sm dark:prose-invert max-w-none min-h-[200px]">
+                <ReactMarkdown>{editedContent || "No content yet"}</ReactMarkdown>
+              </div>
+            ) : (
+              <Textarea
+                value={editedContent}
+                onChange={(e) => setEditedContent(e.target.value)}
+                className="min-h-[200px] resize-none font-mono text-sm"
+                placeholder="Enter memory facts..."
+              />
+            )}
+          </CardContent>
+        </Card>
+      </TooltipProvider>
 
       {/* Section B - Documents */}
       <div className="space-y-4">
