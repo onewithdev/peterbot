@@ -59,6 +59,7 @@ import { chatRoutes } from "./chat-routes.js";
 import { integrationsRoutes } from "./integrations-routes.js";
 import { documentsRoutes } from "./documents-routes.js";
 import { settingsRoutes } from "./settings-routes.js";
+import { sseRoutes } from "./sse-routes.js";
 import {
   getCapabilities,
   getChangelog,
@@ -848,6 +849,12 @@ const app = new Hono()
   // ==========================================================================
 
   .route("/settings", settingsRoutes)
+
+  // ==========================================================================
+  // Events API (Protected - SSE Streaming)
+  // ==========================================================================
+
+  .route("/events", sseRoutes)
 
   // ==========================================================================
   // Capabilities API (Protected)

@@ -6,3 +6,4 @@ storage/
 *.db-shm
 *.db-wal
 .worktrees/
+.todos/

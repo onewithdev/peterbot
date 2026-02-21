@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "shells": [
+    {
+      "tmuxName": "sidecar-sh-peterbot-1",
+      "displayName": "wsl",
+      "createdAt": "2026-02-21T15:32:18.732594913+08:00"
+    },
+    {
+      "tmuxName": "sidecar-sh-peterbot-2",
+      "displayName": "Shell 2",
+      "createdAt": "2026-02-21T15:42:54.327612865+08:00"
+    }
+  ]
+}
