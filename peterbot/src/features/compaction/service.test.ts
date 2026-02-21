@@ -3,26 +3,32 @@ import {
   test,
   expect,
   beforeEach,
-  mock,
 } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import * as schema from "../../db/schema";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { Job } from "../jobs/schema";
+import type { LanguageModel } from "ai";
 
 // Track mock calls
 const mockGenerateTextCalls: { prompt: string }[] = [];
 
-// Mock the ai module
-mock.module("ai", () => ({
-  generateText: mock(async ({ prompt }: { prompt: string }) => {
-    mockGenerateTextCalls.push({ prompt });
-    return { text: `Mocked summary for: ${prompt.slice(0, 50)}...` };
-  }),
-}));
+// Mock LanguageModel for testing
+const mockLanguageModel = {} as LanguageModel;
 
-// Import service functions after mocking
+// Mock generateText function for testing
+async function mockGenerateText({ prompt }: { model: LanguageModel; prompt: string }): Promise<{ text: string }> {
+  mockGenerateTextCalls.push({ prompt });
+  return { text: `Mocked summary for: ${prompt.slice(0, 50)}...` };
+}
+
+// Mock getModel function for testing
+function mockGetModel(): LanguageModel {
+  return mockLanguageModel;
+}
+
+// Import service functions
 import {
   generateCompactionSummary,
   checkAndCompact,
@@ -147,7 +153,7 @@ describe("Compaction Service", () => {
         },
       ];
 
-      const summary = await generateCompactionSummary(jobs);
+      const summary = await generateCompactionSummary(jobs, mockGenerateText, mockGetModel);
 
       expect(summary).toBeString();
       expect(summary).toContain("Mocked summary");
@@ -179,7 +185,7 @@ describe("Compaction Service", () => {
         },
       ];
 
-      await generateCompactionSummary(jobs);
+      await generateCompactionSummary(jobs, mockGenerateText, mockGetModel);
 
       // The prompt should contain job inputs and outputs
       expect(mockGenerateTextCalls.length).toBeGreaterThan(0);
@@ -235,7 +241,7 @@ describe("Compaction Service", () => {
       }
 
       // Call checkAndCompact - this should trigger compaction
-      await checkAndCompact(testDb, chatId, triggerJobId);
+      await checkAndCompact(testDb, chatId, triggerJobId, mockGenerateText, mockGetModel);
 
       // Verify session was saved
       const sessions = await getAllSessions(testDb);
@@ -275,7 +281,7 @@ describe("Compaction Service", () => {
       }
 
       // Should not throw
-      await checkAndCompact(testDb, chatId, triggerJobId);
+      await checkAndCompact(testDb, chatId, triggerJobId, mockGenerateText, mockGetModel);
 
       // Verify session was saved
       const sessions = await getAllSessions(testDb);
@@ -305,7 +311,7 @@ describe("Compaction Service", () => {
       }
 
       // Call checkAndCompact - this should trigger compaction at count 5
-      await checkAndCompact(testDb, chatId, triggerJobId);
+      await checkAndCompact(testDb, chatId, triggerJobId, mockGenerateText, mockGetModel);
 
       // Verify session was saved with custom threshold
       const sessions = await getAllSessions(testDb);

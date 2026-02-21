@@ -24,6 +24,9 @@ export * from "../features/integrations/schema";
 // Documents feature
 export * from "../features/documents/schema";
 
+// Settings feature
+export * from "../features/settings/schema";
+
 // Future feature slices (placeholders):
 // export * from "../features/memory/schema";
 // export * from "../features/users/schema";

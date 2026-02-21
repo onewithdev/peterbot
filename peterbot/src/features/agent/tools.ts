@@ -18,9 +18,10 @@ import { createJob } from "../jobs/repository.js";
  * file generation, or any task that may take more than 10 seconds.
  *
  * @param chatId - The chat ID to associate with the dispatched job
+ * @param skillSystemPrompt - Optional skill system prompt to pass through to the job
  * @returns A Vercel AI SDK tool instance for dispatch_task
  */
-export function createDispatchTaskTool(chatId: string) {
+export function createDispatchTaskTool(chatId: string, skillSystemPrompt?: string) {
   return tool({
     description:
       "Use for complex scripts, web scraping, file generation, or any task that may take more than 10 seconds. " +
@@ -33,6 +34,7 @@ export function createDispatchTaskTool(chatId: string) {
         type: "task",
         input,
         chatId,
+        skillSystemPrompt,
       });
       return {
         jobId: job.id,

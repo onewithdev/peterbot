@@ -7,55 +7,36 @@
  *
  * ## Provider Ejection Pattern
  *
- * This file is the only place you need to modify when switching AI providers.
- * To swap providers (e.g., from Anthropic to OpenAI):
+ * This file delegates to the provider factory which implements DB-first
+ * provider resolution. The factory handles:
+ * - Reading provider configuration from the database
+ * - Decrypting API keys from the api_keys table
+ * - Implementing fallback chain logic
+ * - Environment variable fallback
  *
- * 1. Install the new provider SDK: `npm install @ai-sdk/google`
- * 2. Replace the import below: `import { createGoogleGenerativeAI } from '@ai-sdk/google'`
- * 3. Update the `getModel()` function to use the new provider's model
- * 4. Set the appropriate API key environment variable
+ * ## Migration Note
  *
- * The rest of your application code remains unchanged.
+ * The synchronous getModel() function is now async to support database lookups.
+ * All callers must await this function.
  */
 
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { getOptionalEnv } from "../shared/config.js";
-
-/**
- * Require the Google API key to be set.
- * Validates at call time to support dynamic configuration in tests.
- *
- * @throws Error if GOOGLE_API_KEY is not set
- * @returns The API key value
- */
-function requireGoogleApiKey(): string {
-  const key = process.env.GOOGLE_API_KEY;
-  if (!key || key.trim() === "") {
-    throw new Error(
-      "GOOGLE_API_KEY is required. " +
-        "Set it in your .env file. " +
-        "Get a key at: https://aistudio.google.com/app/apikey"
-    );
-  }
-  return key;
-}
+import type { LanguageModel } from "ai";
+import { getModel as factoryGetModel } from "./provider-factory.js";
 
 /**
  * Get the configured AI model instance.
  *
- * Uses Google's Gemini models via the Vercel AI SDK.
+ * Delegates to the provider factory for DB-first provider resolution.
+ * The factory implements the following resolution order:
+ * 1. Use provider.primary from config (default: anthropic)
+ * 2. Query api_keys table for valid encrypted keys
+ * 3. Walk provider.fallback_chain from config
+ * 4. Fall back to environment variables
+ * 5. Throw descriptive error if no key available
  *
- * @returns The configured AI model ready for text generation
- * @throws Error if GOOGLE_API_KEY is not set
+ * @returns Promise resolving to the configured AI model
+ * @throws Error if no API key is available for any provider
  */
-export function getModel() {
-  const apiKey = requireGoogleApiKey();
-  const modelId = getOptionalEnv("MODEL", "gemini-2.5-flash");
-
-  // Create Google provider with API key
-  const provider = createGoogleGenerativeAI({
-    apiKey,
-  });
-
-  return provider(modelId);
+export async function getModel(): Promise<LanguageModel> {
+  return factoryGetModel();
 }

@@ -41,6 +41,7 @@ import {
   markJobDelivered,
   incrementJobRetryCount,
 } from "../features/jobs/repository.js";
+import { insertJobEvent } from "../features/jobs/events-repository.js";
 import type { Job } from "../features/jobs/schema.js";
 import { config } from "../shared/config.js";
 import { db } from "../db/index.js";
@@ -59,7 +60,6 @@ import {
 import { saveMessage } from "../features/chat/repository.js";
 
 // Force early validation of required config (throws if missing)
-config.googleApiKey;
 config.e2bApiKey;
 
 /**
@@ -313,21 +313,18 @@ async function deliverResult(job: Job, result: string): Promise<void> {
       reply_markup: keyboard,
     });
 
+    // Save bot response to chat FIRST - must succeed before marking delivered
+    await saveMessage(undefined, {
+      chatId: job.chatId,
+      direction: "out",
+      content: fullMessage,
+      sender: "bot",
+      jobId: job.id,
+    });
+
+    // Mark as delivered ONLY after successful chat save
     await markJobDelivered(db, job.id);
     console.log(`[Worker] Delivered result for job ${shortId}`);
-
-    // Save bot response to chat
-    try {
-      await saveMessage(undefined, {
-        chatId: job.chatId,
-        direction: "out",
-        content: fullMessage,
-        sender: "bot",
-        jobId: job.id,
-      });
-    } catch (chatError) {
-      console.error(`[Worker] Failed to save chat message for job ${shortId}:`, chatError);
-    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`[Worker] Failed to deliver result for job ${shortId}:`, errorMessage);
@@ -365,24 +362,23 @@ async function notifyFailure(job: Job, error: string): Promise<void> {
 
     await bot.api.sendMessage(job.chatId, failureMessage);
 
+    // Save bot failure message to chat FIRST - must succeed before marking delivered
+    await saveMessage(undefined, {
+      chatId: job.chatId,
+      direction: "out",
+      content: failureMessage,
+      sender: "bot",
+      jobId: job.id,
+    });
+
+    // Mark as delivered ONLY after successful chat save
     await markJobDelivered(db, job.id);
     console.log(`[Worker] Sent failure notification for job ${shortId}`);
-
-    // Save bot failure message to chat
-    try {
-      await saveMessage(undefined, {
-        chatId: job.chatId,
-        direction: "out",
-        content: failureMessage,
-        sender: "bot",
-        jobId: job.id,
-      });
-    } catch (chatError) {
-      console.error(`[Worker] Failed to save failure chat message for job ${shortId}:`, chatError);
-    }
   } catch (notifyError) {
     const errorMessage = notifyError instanceof Error ? notifyError.message : String(notifyError);
     console.error(`[Worker] Failed to send failure notification for job ${job.id.slice(0, 8)}:`, errorMessage);
+    // Re-throw to allow retry of the failure notification
+    throw notifyError;
   }
 }
 
@@ -499,6 +495,20 @@ async function processJob(job: Job): Promise<void> {
 
   await markJobRunning(db, job.id);
 
+  // Insert job_started event
+  try {
+    let scheduleDescription: string | undefined;
+    if (job.scheduleId) {
+      const schedule = await getScheduleById(db, job.scheduleId);
+      scheduleDescription = schedule?.description;
+    }
+    await insertJobEvent(db, job.id, "job_started", {
+      scheduleDescription,
+    });
+  } catch (eventError) {
+    console.warn(`[Worker] Failed to insert job_started event for job ${shortId}:`, eventError);
+  }
+
   try {
     // Build system prompt (now async to read config files)
     const systemPrompt = await buildSystemPrompt(job.chatId, job.skillSystemPrompt ?? undefined);
@@ -520,7 +530,7 @@ async function processJob(job: Job): Promise<void> {
 
     // Call the AI model
     const result = await generateText({
-      model: getModel(),
+      model: await getModel(),
       system: systemPrompt,
       prompt: job.input,
       tools,
@@ -533,6 +543,13 @@ async function processJob(job: Job): Promise<void> {
     await markJobCompleted(db, job.id, output);
     console.log(`[Worker] Job ${shortId} completed`);
 
+    // Insert job_completed event
+    try {
+      await insertJobEvent(db, job.id, "job_completed", { output });
+    } catch (eventError) {
+      console.warn(`[Worker] Failed to insert job_completed event for job ${shortId}:`, eventError);
+    }
+
     // Check if compaction is needed
     await checkAndCompact(db, job.chatId, job.id);
 
@@ -544,6 +561,13 @@ async function processJob(job: Job): Promise<void> {
     // Mark job as failed
     await markJobFailed(db, job.id, errorMessage);
     console.error(`[Worker] Job ${shortId} failed:`, errorMessage);
+
+    // Insert job_failed event
+    try {
+      await insertJobEvent(db, job.id, "job_failed", { error: errorMessage });
+    } catch (eventError) {
+      console.warn(`[Worker] Failed to insert job_failed event for job ${shortId}:`, eventError);
+    }
 
     // Notify user of failure
     await notifyFailure(job, errorMessage);

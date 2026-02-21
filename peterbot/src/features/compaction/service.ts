@@ -1,8 +1,9 @@
-import { generateText } from "ai";
+import { generateText as defaultGenerateText } from "ai";
+import type { LanguageModel } from "ai";
 import { eq, desc, and } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import * as schema from "../../db/schema.js";
-import { getModel } from "../../ai/client.js";
+import { getModel as defaultGetModel } from "../../ai/client.js";
 import {
   getOrCreateChatState,
   incrementMessageCount,
@@ -14,8 +15,14 @@ import {
 import type { Job } from "../../features/jobs/schema.js";
 import { jobs } from "../../features/jobs/schema.js";
 
+// Types for dependency injection in tests
+type GenerateTextFn = (options: { model: LanguageModel; prompt: string }) => Promise<{ text: string }>;
+type GetModelFn = () => LanguageModel;
+
 export async function generateCompactionSummary(
-  completedJobs: Job[]
+  completedJobs: Job[],
+  generateText: GenerateTextFn = defaultGenerateText,
+  getModel: GetModelFn = defaultGetModel
 ): Promise<string> {
   const jobDetails = completedJobs
     .map(
@@ -46,7 +53,9 @@ Provide a concise summary:`;
 export async function checkAndCompact(
   db: BunSQLiteDatabase<typeof schema>,
   chatId: string,
-  triggerJobId: string
+  triggerJobId: string,
+  generateText: GenerateTextFn = defaultGenerateText,
+  getModel: GetModelFn = defaultGetModel
 ): Promise<void> {
   try {
     // Step 1: Ensure chat state exists
@@ -81,7 +90,7 @@ export async function checkAndCompact(
     }
 
     // Step 7: Generate summary
-    const summary = await generateCompactionSummary(completedJobs);
+    const summary = await generateCompactionSummary(completedJobs, generateText, getModel);
 
     // Step 8: Save session
     await saveSession(db, {

@@ -118,7 +118,7 @@ export const chatRoutes = new Hono()
           if (intent === "quick") {
             // Generate quick response
             const { text: reply } = await generateText({
-              model: getModel(),
+              model: await getModel(),
               system:
                 "You are peterbot, a helpful personal AI assistant. Answer concisely and directly.",
               prompt: content,

@@ -23,5 +23,19 @@ export const jobs = sqliteTable("jobs", {
   retryCount: integer("retry_count", { mode: "number" }).notNull().default(0),
 });
 
+export const jobEvents = sqliteTable("job_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  jobId: text("job_id").notNull(),
+  event: text("event", {
+    enum: ["job_started", "job_completed", "job_failed"],
+  }).notNull(),
+  payload: text("payload"), // JSON: { jobId, status, scheduleDescription? }
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
+export type JobEvent = typeof jobEvents.$inferSelect;
+export type NewJobEvent = typeof jobEvents.$inferInsert;

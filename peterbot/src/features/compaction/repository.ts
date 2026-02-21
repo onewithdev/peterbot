@@ -147,4 +147,41 @@ export async function seedDefaultConfig(
       updatedAt: new Date(),
     })
     .onConflictDoNothing();
+
+  // Provider configuration defaults
+  await db
+    .insert(config)
+    .values({
+      key: "provider.primary",
+      value: "anthropic",
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
+
+  await db
+    .insert(config)
+    .values({
+      key: "provider.fallback_chain",
+      value: JSON.stringify(["google", "zai", "moonshot"]),
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
+
+  await db
+    .insert(config)
+    .values({
+      key: "provider.model.anthropic",
+      value: "claude-sonnet-4-5-20250929",
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
+
+  await db
+    .insert(config)
+    .values({
+      key: "provider.model.google",
+      value: "gemini-2.5-flash",
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
 }

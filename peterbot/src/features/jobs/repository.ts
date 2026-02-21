@@ -3,6 +3,12 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { db as defaultDb } from "../../db";
 import * as schema from "../../db/schema";
 import { jobs, type Job, type NewJob } from "./schema";
+import { schedules } from "./schedules/schema";
+
+/**
+ * Job with schedule description (enriched for API responses).
+ */
+export type JobWithSchedule = Job & { scheduleDescription: string | null };
 
 export async function createJob(
   db: BunSQLiteDatabase<typeof schema> = defaultDb,
@@ -40,6 +46,31 @@ export async function getJobsByChatId(
     .where(eq(jobs.chatId, chatId))
     .orderBy(desc(jobs.createdAt))
     .limit(20);
+}
+
+/**
+ * Get jobs with their associated schedule description.
+ * Used for the dashboard API to show schedule context.
+ */
+export async function getJobsWithSchedule(
+  db: BunSQLiteDatabase<typeof schema> = defaultDb,
+  chatId: string
+): Promise<JobWithSchedule[]> {
+  const result = await db
+    .select({
+      job: jobs,
+      scheduleDescription: schedules.description,
+    })
+    .from(jobs)
+    .leftJoin(schedules, eq(jobs.scheduleId, schedules.id))
+    .where(eq(jobs.chatId, chatId))
+    .orderBy(desc(jobs.createdAt))
+    .limit(20);
+
+  return result.map((row) => ({
+    ...row.job,
+    scheduleDescription: row.scheduleDescription ?? null,
+  }));
 }
 
 export async function getPendingJobs(

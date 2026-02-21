@@ -21,6 +21,7 @@ export interface ProcessMessageInput {
   message: string;
   chatId: string;
   source: "telegram" | "web";
+  skillSystemPrompt?: string;
 }
 
 export interface ProcessMessageResult {
@@ -51,14 +52,14 @@ const INLINE_TIMEOUT_MS = 30000;
 export async function processMessage(
   input: ProcessMessageInput
 ): Promise<ProcessMessageResult> {
-  const { message, chatId, source } = input;
+  const { message, chatId, source, skillSystemPrompt } = input;
 
   // 1. Read config for agent model selection
   const modelConfig = await getConfig(defaultDb, "agent.model");
   const modelName = modelConfig?.value ?? "gemini";
 
   // 2. Get the AI model (with fallback handling)
-  const { model, usedFallbackModel } = getAgentModel(modelName);
+  const { model, usedFallbackModel } = await getAgentModel(modelName);
 
   // 3. Load conversation history (last 20 messages)
   const historyMessages = await getMessages(defaultDb, chatId, 20);
@@ -78,13 +79,13 @@ export async function processMessage(
   }
 
   // 5. Build system prompt
-  const systemPrompt = await buildSystemPrompt(chatId);
+  const systemPrompt = await buildSystemPrompt(chatId, skillSystemPrompt);
 
-  // 6. Build tools (including the dispatch_task tool with captured chatId)
+  // 6. Build tools (including the dispatch_task tool with captured chatId and skillSystemPrompt)
   const tools = {
     runCode: peterbotTools.runCode,
     executeComposioAction: peterbotTools.executeComposioAction,
-    dispatch_task: createDispatchTaskTool(chatId),
+    dispatch_task: createDispatchTaskTool(chatId, skillSystemPrompt),
   };
 
   // 7. Call generateText with timeout handling
@@ -136,6 +137,7 @@ export async function processMessage(
         type: "task",
         input: message,
         chatId,
+        skillSystemPrompt,
       });
       jobId = job.id;
       content = `⚙️ Too slow to run inline → started a job instead. Job #${job.id.slice(0, 8)} · Check the Job Monitor for progress.`;

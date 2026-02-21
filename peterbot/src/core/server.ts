@@ -210,8 +210,11 @@ async function boot(): Promise<void> {
 
   // Force early validation of required config (throws if missing)
   config.telegramChatId;
-  config.moonshotApiKey;
   config.e2bApiKey;
+  // Note: encryptionKey is NOT validated here - it's only required when
+  // storing/reading encrypted DB keys. The encryption module validates
+  // it lazily when encrypt/decrypt is called. This allows env-only key
+  // paths to boot without ENCRYPTION_KEY.
 
   // Start worker first (non-blocking)
   startWorker();

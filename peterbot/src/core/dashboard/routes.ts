@@ -58,6 +58,7 @@ import { scanSkillsOnce } from "../../features/skills/loader.js";
 import { chatRoutes } from "./chat-routes.js";
 import { integrationsRoutes } from "./integrations-routes.js";
 import { documentsRoutes } from "./documents-routes.js";
+import { settingsRoutes } from "./settings-routes.js";
 import {
   getCapabilities,
   getChangelog,
@@ -124,7 +125,24 @@ const app = new Hono()
   // ==========================================================================
   // System Status (Protected)
   // ==========================================================================
-  .get("/status", passwordAuth, (c) => {
+  .get("/status", passwordAuth, async (c) => {
+    const { getAllApiKeys } = await import("../../features/settings/repository.js");
+    const allKeys = await getAllApiKeys(undefined);
+
+    // Check if each provider has at least one valid key
+    const anthropicKeyConfigured = allKeys.some(
+      (k) => k.provider === "anthropic" && k.isValid
+    );
+    const googleKeyConfigured = allKeys.some(
+      (k) => k.provider === "google" && k.isValid
+    );
+    const zaiKeyConfigured = allKeys.some(
+      (k) => k.provider === "zai" && k.isValid
+    );
+    const moonshotKeyConfigured = allKeys.some(
+      (k) => k.provider === "moonshot" && k.isValid
+    );
+
     return c.json({
       telegram: {
         connected: true,
@@ -136,9 +154,10 @@ const app = new Hono()
       composio: {
         configured: isComposioConfigured(),
       },
-      googleApiKeyConfigured: !!process.env.GOOGLE_API_KEY,
-      zaiApiKeyConfigured: !!process.env.ZAI_API_KEY,
-      moonshotApiKeyConfigured: !!process.env.MOONSHOT_API_KEY,
+      anthropicKeyConfigured,
+      googleKeyConfigured,
+      zaiKeyConfigured,
+      moonshotKeyConfigured,
       timestamp: Date.now(),
     });
   })
@@ -170,7 +189,8 @@ const app = new Hono()
    * List all jobs for the configured chat ID.
    */
   .get("/jobs", passwordAuth, async (c) => {
-    const jobs = await getJobsByChatId(undefined, config.telegramChatId);
+    const { getJobsWithSchedule } = await import("../../features/jobs/repository.js");
+    const jobs = await getJobsWithSchedule(undefined, config.telegramChatId);
     return c.json({
       jobs,
       total: jobs.length,
@@ -822,6 +842,12 @@ const app = new Hono()
   // ==========================================================================
 
   .route("/documents", documentsRoutes)
+
+  // ==========================================================================
+  // Settings API (Protected)
+  // ==========================================================================
+
+  .route("/settings", settingsRoutes)
 
   // ==========================================================================
   // Capabilities API (Protected)

@@ -109,11 +109,19 @@ export const config = {
   },
 
   /**
-   * Google AI API Key (for Gemini).
-   * Required for AI functionality.
+   * Encryption key for sensitive data (API keys, etc.).
+   * Must be at least 32 characters.
+   * Required at startup.
    */
-  get googleApiKey(): string {
-    return requireEnv("GOOGLE_API_KEY");
+  get encryptionKey(): string {
+    const key = requireEnv("ENCRYPTION_KEY");
+    if (key.length < 32) {
+      throw new Error(
+        `ENCRYPTION_KEY must be at least 32 characters long (got ${key.length}).\n` +
+          "Please use a strong, randomly generated key."
+      );
+    }
+    return key;
   },
 
   /**
@@ -123,6 +131,13 @@ export const config = {
   get e2bApiKey(): string {
     return requireEnv("E2B_API_KEY");
   },
+
+  /**
+   * Moonshot API Key for Kimi K2.5 models.
+   * Optional - only used as fallback if no DB keys configured.
+   * Get yours at: https://platform.moonshot.cn
+   */
+  moonshotApiKey: getOptionalEnv("MOONSHOT_API_KEY", ""),
 
   /**
    * SQLite database file path.
@@ -152,4 +167,25 @@ export const config = {
    * Get yours at: https://composio.dev
    */
   composioApiKey: getOptionalEnv("COMPOSIO_API_KEY", ""),
+
+  /**
+   * Google AI API Key (for Gemini).
+   * Optional - only used as fallback if no DB keys configured.
+   * Get yours at: https://aistudio.google.com/app/apikey
+   */
+  googleApiKey: getOptionalEnv("GOOGLE_API_KEY", ""),
+
+  /**
+   * Z.ai API Key for GLM-5 models.
+   * Optional - only used as fallback if no DB keys configured.
+   * Get yours at: https://z.ai
+   */
+  zaiApiKey: getOptionalEnv("ZAI_API_KEY", ""),
+
+  /**
+   * Anthropic API Key for Claude models.
+   * Optional - only used as fallback if no DB keys configured.
+   * Get yours at: https://console.anthropic.com
+   */
+  anthropicApiKey: getOptionalEnv("ANTHROPIC_API_KEY", ""),
 } as const;
