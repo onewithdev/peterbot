@@ -17,6 +17,7 @@ function SettingsLayout() {
     { path: "/settings/blocklist", label: "Blocklist" },
     { path: "/settings/compaction", label: "Compaction" },
     { path: "/settings/agent", label: "Agent" },
+    { path: "/settings/providers", label: "Providers" },
   ];
 
   // Base tab styles
